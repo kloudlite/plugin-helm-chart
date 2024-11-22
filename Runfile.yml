@@ -1,0 +1,56 @@
+tasks:
+  default:
+    silent: true
+    cmds:
+      - |+
+        echo "initialize the project with the following command"
+        echo "task init repo=<git-repo> user=<git-user>"
+
+  init:
+    env:
+      repo:
+        required: true
+      user:
+        required: true
+      domain:
+        default:
+          value: "github.com"
+    # silent: true
+    cmd:
+      - |
+        if [ ! -f "go.mod" ]; then
+          mkdir -p .tmp
+          mv * .tmp
+          repo_url="$domain/$user/$repo"
+          go mod init $repo_url
+          kubebuilder init --domain $repo.$user.$domain --license apache2
+          mv .tmp/* . && rm -rf .tmp
+        fi
+
+  new:api:
+    desc: create a new api
+
+    requires:
+      - sh: test -f "PROJECT"
+
+    env:
+      version:
+        required: true
+
+      kind: 
+        required: true
+
+    cmd:
+      - |
+        kubebuilder create api --version ${version} --kind ${kind} --resource --controller
+
+  manifests:
+    cmd:
+      - make manifests
+      - make generate
+
+  dev:
+    env:
+      HELM_JOB_IMAGE: "ghcr.io/kloudlite/kloudlite/operator/workers/helm-job-runner:v1.1.4"
+    cmd:
+      - make run

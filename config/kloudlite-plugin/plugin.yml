@@ -1,0 +1,41 @@
+apiVersion: crds.kloudlite.io/v1
+kind: ManagedServicePlugin
+metadata:
+  name: plugin-helm-chart
+spec:
+  apiVersion: "plugin-helm-chart.kloudlite.github.com/v1"
+  kinds:
+    - kind: "HelmChart"
+      inputs:
+        - input: "nodeSelector"
+          label: "Node Selector"
+          description: "Node Selector"
+          type: "nodeSelector"
+          required: false
+
+        - input: "tolerations"
+          label: "Tolerations"
+          description: "Tolerations"
+          type: array
+          required: false
+
+        - input: "resources.cpu"
+          label: "CPU"
+          description: "Allocates specified CPU resources"
+          type: float-range
+          required: false
+
+        - input: "resources.memory"
+          label: "Memory"
+          description: "Allocates specified CPU resources"
+          type: float-range
+          required: false
+
+        - input: "resources.storage"
+          label: "Storage"
+          description: "Allocates specified CPU resources"
+          type: float-range
+          required: false
+
+      outputs:
+        keys: []

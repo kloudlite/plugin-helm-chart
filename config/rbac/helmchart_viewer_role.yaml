@@ -1,0 +1,23 @@
+# permissions for end users to view helmcharts.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: plugin-helm-chart
+    app.kubernetes.io/managed-by: kustomize
+  name: helmchart-viewer-role
+rules:
+- apiGroups:
+  - plugin-helm-chart.kloudlite.github.com
+  resources:
+  - helmcharts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - plugin-helm-chart.kloudlite.github.com
+  resources:
+  - helmcharts/status
+  verbs:
+  - get

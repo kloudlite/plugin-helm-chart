@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - plugin-helm-chart.kloudlite.github.com
+  resources:
+  - helmcharts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - plugin-helm-chart.kloudlite.github.com
+  resources:
+  - helmcharts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - plugin-helm-chart.kloudlite.github.com
+  resources:
+  - helmcharts/status
+  verbs:
+  - get
+  - patch
+  - update
