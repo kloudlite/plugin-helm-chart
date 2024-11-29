@@ -1,10 +1,10 @@
 module github.com/kloudlite/plugin-helm-chart
 
-go 1.22.0
+go 1.23.0
 
 require (
 	github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482
-	github.com/kloudlite/operator v1.1.2-0.20241116094534-289ea4d7d8dd
+	github.com/kloudlite/operator v1.1.1
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
 	github.com/valyala/fasttemplate v1.2.2
@@ -125,3 +125,5 @@ require (
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
+
+// replace github.com/kloudlite/operator => /home/nxtcoder17/workspace/kloudlite/operator

@@ -28,3 +28,6 @@ go.work
 
 bin
 .direnv
+.secrets
+go.work
+go.work.*

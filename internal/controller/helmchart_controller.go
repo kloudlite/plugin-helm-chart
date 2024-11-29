@@ -33,9 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
 	fn "github.com/kloudlite/operator/pkg/functions"
@@ -265,6 +264,11 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 	}
 
 	if job == nil {
+		jobVars := obj.Spec.HelmJobVars
+		if jobVars == nil {
+			jobVars = &v1.HelmJobVars{}
+		}
+
 		b, err := templates.ParseBytes(r.templateInstallOrUpgradeJob, templates.InstallJobVars{
 			Metadata: metav1.ObjectMeta{
 				Name:      getJobName(obj.Name),
@@ -284,9 +288,9 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 			ImagePullPolicy:          "",
 			BackOffLimit:             1,
 			ServiceAccountName:       JobServiceAccountName,
-			Tolerations:              obj.Spec.Tolerations,
+			Tolerations:              jobVars.Tolerations,
 			Affinity:                 corev1.Affinity{},
-			NodeSelector:             obj.Spec.NodeSelector,
+			NodeSelector:             jobVars.NodeSelector,
 			ChartRepoURL:             obj.Spec.Chart.URL,
 			ChartName:                obj.Spec.Chart.Name,
 			ChartVersion:             obj.Spec.Chart.Version,
@@ -339,6 +343,10 @@ func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) s
 	ctx, obj := req.Context(), req.Object
 	check := rApi.NewRunningCheck(ProcessExports, req)
 
+	if obj.Export.Template == "" {
+		return check.Completed()
+	}
+
 	var getSecret plugin.GetSecret = func(secretName string) (map[string]string, error) {
 		s, err := rApi.Get(ctx, r.Client, fn.NN(obj.Namespace, secretName), &corev1.Secret{})
 		if err != nil {
@@ -366,7 +374,13 @@ func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) s
 		return m, nil
 	}
 
-	m, err := obj.Export.ParseKV(getSecret, getConfigMap)
+	valuesMap := struct {
+		HelmReleaseName string
+	}{
+		HelmReleaseName: obj.Name,
+	}
+
+	m, err := obj.Export.ParseKV(getSecret, getConfigMap, valuesMap)
 	if err != nil {
 		return check.Failed(errors.NewEf(err, ""))
 	}
@@ -400,6 +414,11 @@ func (r *HelmChartReconciler) startUninstallJob(req *rApi.Request[*v1.HelmChart]
 	}
 
 	if job == nil {
+		jobVars := obj.Spec.HelmJobVars
+		if jobVars == nil {
+			jobVars = &v1.HelmJobVars{}
+		}
+
 		b, err := templates.ParseBytes(r.templateUninstallJob, templates.UnInstallJobVars{
 			Metadata: metav1.ObjectMeta{
 				Name:      getJobName(obj.Name),
@@ -419,9 +438,9 @@ func (r *HelmChartReconciler) startUninstallJob(req *rApi.Request[*v1.HelmChart]
 			ImagePullPolicy:          "",
 			BackOffLimit:             0,
 			ServiceAccountName:       JobServiceAccountName,
-			Tolerations:              obj.Spec.Tolerations,
+			Tolerations:              jobVars.Tolerations,
 			Affinity:                 corev1.Affinity{},
-			NodeSelector:             obj.Spec.NodeSelector,
+			NodeSelector:             jobVars.NodeSelector,
 			ChartRepoURL:             obj.Spec.Chart.URL,
 			ChartName:                obj.Spec.Chart.Name,
 			ChartVersion:             obj.Spec.Chart.Version,
@@ -506,21 +525,23 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.Env, err = env.LoadEnv()
 
-	builder := ctrl.NewControllerManagedBy(mgr).For(&v1.HelmChart{})
+	builder := ctrl.NewControllerManagedBy(mgr).For(&v1.HelmChart{}).Named("plugin-helm-chart")
 
-	builder.Watches(
-		&batchv1.Job{},
-		handler.EnqueueRequestsFromMapFunc(
-			func(_ context.Context, o client.Object) []reconcile.Request {
-				if v, ok := o.GetLabels()[LabelHelmChartName]; ok {
-					return []reconcile.Request{{NamespacedName: fn.NN(o.GetNamespace(), v)}}
-				}
-				return nil
-			}),
-	)
+	// builder.Watches(
+	// 	&batchv1.Job{},
+	// 	handler.EnqueueRequestsFromMapFunc(
+	// 		func(_ context.Context, o client.Object) []reconcile.Request {
+	// 			if v, ok := o.GetLabels()[LabelHelmChartName]; ok {
+	// 				return []reconcile.Request{{NamespacedName: fn.NN(o.GetNamespace(), v)}}
+	// 			}
+	// 			return nil
+	// 		}),
+	// )
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1.HelmChart{}).
-		Named("helmchart").
-		Complete(r)
+	builder.WithOptions(controller.Options{MaxConcurrentReconciles: r.Env.MaxConcurrentReconciles})
+	return builder.Complete(r)
+	// return ctrl.NewControllerManagedBy(mgr).
+	// 	For(&v1.HelmChart{}).
+	// 	Named("helmchart").
+	// 	Complete(r)
 }

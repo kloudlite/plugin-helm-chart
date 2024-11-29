@@ -31,20 +31,24 @@ type ChartInfo struct {
 	Name    string `json:"name"`
 }
 
-// HelmChartSpec defines the desired state of HelmChart.
-type HelmChartSpec struct {
+type HelmJobVars struct {
 	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
 
 	Resources ct.Resources `json:"resources"`
+}
 
+// HelmChartSpec defines the desired state of HelmChart.
+type HelmChartSpec struct {
 	Chart ChartInfo `json:"chart"`
+
+	HelmValues map[string]apiextensionsv1.JSON `json:"helmValues"`
+
+	HelmJobVars *HelmJobVars `json:"jobVars,omitempty"`
 
 	PreInstall  string `json:"preInstall,omitempty"`
 	PostInstall string `json:"postInstall,omitempty"`
-
-	HelmValues map[string]apiextensionsv1.JSON `json:"helmValues"`
 
 	PreUninstall  string `json:"preUninstall,omitempty"`
 	PostUninstall string `json:"postUninstall,omitempty"`
@@ -59,14 +63,17 @@ type HelmChartStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:JSONPath=".status.lastReconcileTime",name=Seen,type=date
+// +kubebuilder:printcolumn:JSONPath=".metadata.annotations.kloudlite\\.io\\/operator\\.checks",name=Checks,type=string
+// +kubebuilder:printcolumn:JSONPath=".metadata.annotations.kloudlite\\.io\\/operator\\.resource\\.ready",name=Ready,type=string
+// +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name=Age,type=date
 
 // HelmChart is the Schema for the helmcharts API.
 type HelmChart struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   HelmChartSpec        `json:"spec,omitempty"`
-	Output LocalSecretReference `json:"output"`
+	Spec   HelmChartSpec   `json:"spec,omitempty"`
 
 	Export plugin.Export   `json:"export,omitempty"`
 	Status HelmChartStatus `json:"status,omitempty"`

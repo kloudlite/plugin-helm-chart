@@ -44,7 +44,7 @@ spec:
 
               version_args=()
               if [ -n "{{.ChartVersion}}" ]; then
-                version_args+=("--version", "{{.ChartVersion}}")
+                version_args+=("--version" "{{.ChartVersion}}")
               fi
 
               helm upgrade --install {{.ReleaseName}} helm-repo/{{.ChartName}} --namespace {{.ReleaseNamespace}} ${version_args[@]} --values values.yml 2>&1 | tee /dev/termination-log
@@ -53,7 +53,6 @@ spec:
               echo "running post-install job script"
               {{ .PostInstall | nindent 14 }}
               {{- end }}
-            
       restartPolicy: Never
   backoffLimit: {{ .BackOffLimit | default 1 | int}}
 {{- end }}

@@ -79,4 +79,7 @@ func Read(t templateFile) ([]byte, error) {
 	return templatesDir.ReadFile(filepath.Join(string(t)))
 }
 
-var ParseBytes = operator_templates.ParseBytes
+var (
+	ParseBytes  = operator_templates.ParseBytes
+	ParseBytes2 = operator_templates.ParseBytes2
+)
