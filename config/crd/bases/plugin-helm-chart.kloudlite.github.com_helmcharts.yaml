@@ -1010,7 +1010,7 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                  resources:
+                  resource:
                     properties:
                       cpu:
                         properties:
@@ -1036,19 +1036,6 @@ spec:
                         - max
                         - min
                         type: object
-                      storage:
-                        properties:
-                          size:
-                            pattern: '[\d]+(M|G)i$'
-                            type: string
-                          storageClass:
-                            type: string
-                        required:
-                        - size
-                        type: object
-                    required:
-                    - cpu
-                    - memory
                     type: object
                   tolerations:
                     items:
@@ -1089,7 +1076,7 @@ spec:
                       type: object
                     type: array
                 required:
-                - resources
+                - resource
                 type: object
               postInstall:
                 type: string
@@ -1157,9 +1144,6 @@ spec:
               lastReconcileTime:
                 format: date-time
                 type: string
-              message:
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
               releaseNotes:
                 type: string
               releaseStatus:

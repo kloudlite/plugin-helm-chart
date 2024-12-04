@@ -17,9 +17,9 @@ limitations under the License.
 package v1
 
 import (
-	ct "github.com/kloudlite/operator/apis/common-types"
-	rApi "github.com/kloudlite/operator/pkg/operator"
-	"github.com/kloudlite/operator/pkg/plugin"
+	"github.com/kloudlite/operator/toolkit/plugin"
+	rApi "github.com/kloudlite/operator/toolkit/reconciler"
+	types "github.com/kloudlite/operator/toolkit/types"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +36,7 @@ type HelmJobVars struct {
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
 
-	Resources ct.Resources `json:"resources"`
+	Resource types.Resource `json:"resource"`
 }
 
 // HelmChartSpec defines the desired state of HelmChart.
@@ -73,7 +73,7 @@ type HelmChart struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   HelmChartSpec   `json:"spec,omitempty"`
+	Spec HelmChartSpec `json:"spec,omitempty"`
 
 	Export plugin.Export   `json:"export,omitempty"`
 	Status HelmChartStatus `json:"status,omitempty"`

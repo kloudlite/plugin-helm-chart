@@ -4,7 +4,7 @@ import (
 	"embed"
 	"path/filepath"
 
-	operator_templates "github.com/kloudlite/operator/pkg/templates"
+	operator_templates "github.com/kloudlite/operator/toolkit/templates"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
