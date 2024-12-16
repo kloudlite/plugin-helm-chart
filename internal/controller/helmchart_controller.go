@@ -18,18 +18,18 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	// "github.com/kloudlite/operator/toolkit/constants"
 	"github.com/kloudlite/operator/toolkit/errors"
 	"github.com/kloudlite/operator/toolkit/logging"
 	"github.com/kloudlite/operator/toolkit/plugin"
 	rApi "github.com/kloudlite/operator/toolkit/reconciler"
 	stepResult "github.com/kloudlite/operator/toolkit/reconciler/step-result"
-	constants2 "github.com/kloudlite/plugin-helm-chart/constants"
+	"github.com/kloudlite/plugin-helm-chart/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -241,9 +241,9 @@ func getJobName(suffix string) string {
 }
 
 const (
-	LabelHelmJobType        string = constants2.ProjectDomain + "/helm.job-type"
-	LabelHelmChartName      string = constants2.ProjectDomain + "/helm.chart-name"
-	LabelResourceGeneration string = constants2.ProjectDomain + "/helm.resource-generation"
+	LabelHelmJobType        string = constants.ProjectDomain + "/helm.job-type"
+	LabelHelmChartName      string = constants.ProjectDomain + "/helm.chart-name"
+	LabelResourceGeneration string = constants.ProjectDomain + "/helm.resource-generation"
 )
 
 func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
@@ -258,9 +258,25 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 		job = nil
 	}
 
-	values, err := valuesToYaml(obj.Spec.HelmValues)
+	helmValues := obj.Spec.HelmValues
+
+	if v, ok := obj.GetAnnotations()[constants.ForceReconcile]; ok && v == "true" {
+		if helmValues == nil {
+			helmValues = make(map[string]apiextensionsv1.JSON, 1)
+		}
+		b, _ := json.Marshal(map[string]any{"time": time.Now().Format(time.RFC3339)})
+		helmValues["force-reconciled-at"] = apiextensionsv1.JSON{Raw: b}
+		ann := obj.GetAnnotations()
+		delete(ann, constants.ForceReconcile)
+		obj.SetAnnotations(ann)
+		if err := r.Update(ctx, obj); err != nil {
+			return check.StillRunning(fmt.Errorf("waiting for reconcilation"))
+		}
+	}
+
+	values, err := valuesToYaml(helmValues)
 	if err != nil {
-		return check.Failed(err)
+		return check.Failed(errors.NewEf(err, "converting helm values to YAML"))
 	}
 
 	if job == nil {
