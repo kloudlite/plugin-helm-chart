@@ -44,7 +44,5 @@ jobs:
 
       - name: Build Binary
         shell: bash
-        env:
-          IMAGE: "ghcr.io/${{ github.repository }}:$IMAGE_TAG"
         run: |+
-          run build image=$IMAGE
+          run build image=ghcr.io/${{ github.repository }}:$IMAGE_TAG
