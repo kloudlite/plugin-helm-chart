@@ -18,18 +18,18 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/kloudlite/operator/pkg/constants"
-	"github.com/kloudlite/operator/pkg/errors"
-	"github.com/kloudlite/operator/pkg/logging"
-	rApi "github.com/kloudlite/operator/pkg/operator"
-	stepResult "github.com/kloudlite/operator/pkg/operator/step-result"
-	"github.com/kloudlite/operator/pkg/plugin"
-	constants2 "github.com/kloudlite/plugin-helm-chart/constants"
+	"github.com/kloudlite/operator/toolkit/errors"
+	"github.com/kloudlite/operator/toolkit/logging"
+	"github.com/kloudlite/operator/toolkit/plugin"
+	rApi "github.com/kloudlite/operator/toolkit/reconciler"
+	stepResult "github.com/kloudlite/operator/toolkit/reconciler/step-result"
+	"github.com/kloudlite/plugin-helm-chart/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,9 +37,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
-	fn "github.com/kloudlite/operator/pkg/functions"
-	job_manager "github.com/kloudlite/operator/pkg/job-helper"
-	"github.com/kloudlite/operator/pkg/kubectl"
+	fn "github.com/kloudlite/operator/toolkit/functions"
+	job_manager "github.com/kloudlite/operator/toolkit/job-helper"
+	"github.com/kloudlite/operator/toolkit/kubectl"
 	v1 "github.com/kloudlite/plugin-helm-chart/api/v1"
 	"github.com/kloudlite/plugin-helm-chart/internal/controller/templates"
 	"github.com/kloudlite/plugin-helm-chart/internal/env"
@@ -116,7 +116,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return step.ReconcilerResponse()
 	}
 
-	if step := req.EnsureFinalizers(constants.CommonFinalizer); !step.ShouldProceed() {
+	if step := req.EnsureFinalizers(rApi.CommonFinalizer); !step.ShouldProceed() {
 		return step.ReconcilerResponse()
 	}
 
@@ -175,7 +175,7 @@ func (r *HelmChartReconciler) ensureJobRBAC(req *rApi.Request[*v1.HelmChart]) st
 		if jobSvcAcc.Annotations == nil {
 			jobSvcAcc.Annotations = make(map[string]string, 1)
 		}
-		jobSvcAcc.Annotations[constants.DescriptionKey] = "Service account used by helm charts to run helm release jobs"
+		jobSvcAcc.Annotations[rApi.AnnotationDescriptionKey] = "Service account used by helm charts to run helm release jobs"
 		return nil
 	}); err != nil {
 		return check.Failed(err)
@@ -186,7 +186,7 @@ func (r *HelmChartReconciler) ensureJobRBAC(req *rApi.Request[*v1.HelmChart]) st
 		if crb.Annotations == nil {
 			crb.Annotations = make(map[string]string, 1)
 		}
-		crb.Annotations[constants.DescriptionKey] = "Cluster role binding used by helm charts to run helm release jobs"
+		crb.Annotations[rApi.AnnotationDescriptionKey] = "Cluster role binding used by helm charts to run helm release jobs"
 
 		crb.RoleRef = rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -241,9 +241,9 @@ func getJobName(suffix string) string {
 }
 
 const (
-	LabelHelmJobType        string = constants2.ProjectDomain + "/helm.job-type"
-	LabelHelmChartName      string = constants2.ProjectDomain + "/helm.chart-name"
-	LabelResourceGeneration string = constants2.ProjectDomain + "/helm.resource-generation"
+	LabelHelmJobType        string = constants.ProjectDomain + "/helm.job-type"
+	LabelHelmChartName      string = constants.ProjectDomain + "/helm.chart-name"
+	LabelResourceGeneration string = constants.ProjectDomain + "/helm.resource-generation"
 )
 
 func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
@@ -258,9 +258,25 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 		job = nil
 	}
 
-	values, err := valuesToYaml(obj.Spec.HelmValues)
+	helmValues := obj.Spec.HelmValues
+
+	if v, ok := obj.GetAnnotations()[constants.ForceReconcile]; ok && v == "true" {
+		if helmValues == nil {
+			helmValues = make(map[string]apiextensionsv1.JSON, 1)
+		}
+		b, _ := json.Marshal(map[string]any{"time": time.Now().Format(time.RFC3339)})
+		helmValues["force-reconciled-at"] = apiextensionsv1.JSON{Raw: b}
+		ann := obj.GetAnnotations()
+		delete(ann, constants.ForceReconcile)
+		obj.SetAnnotations(ann)
+		if err := r.Update(ctx, obj); err != nil {
+			return check.StillRunning(fmt.Errorf("waiting for reconcilation"))
+		}
+	}
+
+	values, err := valuesToYaml(helmValues)
 	if err != nil {
-		return check.Failed(err)
+		return check.Failed(errors.NewEf(err, "converting helm values to YAML"))
 	}
 
 	if job == nil {
@@ -508,8 +524,15 @@ func (r *HelmChartReconciler) startUninstallJob(req *rApi.Request[*v1.HelmChart]
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Client = mgr.GetClient()
 	r.Scheme = mgr.GetScheme()
-	r.logger = logging.NewOrDie(&logging.Options{Name: "plugin-helm-chart.kloudlite"})
-	r.yamlClient = kubectl.NewYAMLClientOrDie(mgr.GetConfig(), kubectl.YAMLClientOpts{Logger: r.logger})
+	r.logger = logging.NewOrDie(&logging.Options{
+		Prefix:          "plugin-helm-chart.kloudlite",
+		ShowTimestamp:   false,
+		ShowCaller:      true,
+		ShowDebugLogs:   false,
+		DevelopmentMode: false,
+	})
+	// r.logger = logging.NewOrDie(&logging.Options{Name: "plugin-helm-chart.kloudlite"})
+	r.yamlClient = kubectl.NewYAMLClientOrDie(mgr.GetConfig(), kubectl.YAMLClientOpts{})
 
 	var err error
 
@@ -526,22 +549,8 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Env, err = env.LoadEnv()
 
 	builder := ctrl.NewControllerManagedBy(mgr).For(&v1.HelmChart{}).Named("plugin-helm-chart")
-
-	// builder.Watches(
-	// 	&batchv1.Job{},
-	// 	handler.EnqueueRequestsFromMapFunc(
-	// 		func(_ context.Context, o client.Object) []reconcile.Request {
-	// 			if v, ok := o.GetLabels()[LabelHelmChartName]; ok {
-	// 				return []reconcile.Request{{NamespacedName: fn.NN(o.GetNamespace(), v)}}
-	// 			}
-	// 			return nil
-	// 		}),
-	// )
-
+	builder.Owns(&batchv1.Job{})
 	builder.WithOptions(controller.Options{MaxConcurrentReconciles: r.Env.MaxConcurrentReconciles})
+	builder.WithEventFilter(rApi.ReconcileFilter())
 	return builder.Complete(r)
-	// return ctrl.NewControllerManagedBy(mgr).
-	// 	For(&v1.HelmChart{}).
-	// 	Named("helmchart").
-	// 	Complete(r)
 }

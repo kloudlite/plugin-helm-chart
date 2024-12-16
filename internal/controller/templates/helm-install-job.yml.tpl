@@ -47,7 +47,7 @@ spec:
                 version_args+=("--version" "{{.ChartVersion}}")
               fi
 
-              helm upgrade --install {{.ReleaseName}} helm-repo/{{.ChartName}} --namespace {{.ReleaseNamespace}} ${version_args[@]} --values values.yml 2>&1 | tee /dev/termination-log
+              helm upgrade --wait --install {{.ReleaseName}} helm-repo/{{.ChartName}} --namespace {{.ReleaseNamespace}} ${version_args[@]} --values values.yml 2>&1 | tee /dev/termination-log
 
               {{- if .PostInstall }}
               echo "running post-install job script"
