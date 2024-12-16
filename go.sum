@@ -20,9 +20,11 @@ github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyY
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/charmbracelet/lipgloss v1.0.0 h1:O7VkGDvqEdGi93X+DeqsQ7PKHDgtQfF8j8/O2qFMQNg=
+github.com/charmbracelet/lipgloss v1.0.0/go.mod h1:U5fy9Z+C38obMs+T+tJqst9VGzlOYGj4ri9reL3qUlo=
 github.com/charmbracelet/log v0.4.0 h1:G9bQAcx8rWA2T3pWvx7YtPTPwgqpk7D68BX21IRW8ZM=
 github.com/charmbracelet/log v0.4.0/go.mod h1:63bXt/djrizTec0l11H20t8FDSvA4CRZJ1KH22MdptM=
 github.com/charmbracelet/x/ansi v0.4.2 h1:0JM6Aj/g/KC154/gOP4vfxun0ff6itogDYk41kof+qk=
+github.com/charmbracelet/x/ansi v0.4.2/go.mod h1:dk73KoMTT5AX5BsX0KrqhsTqAnhZZoCBjs7dGWp4Ktw=
 github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482 h1:5/aEFreBh9hH/0G+33xtczJCvMaulqsm9nDuu2BZUEo=
 github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482/go.mod h1:TM9ug+H/2cI3EjyIDr5xKCkFGyNE59URgH1wu5NyU8E=
 github.com/cpuguy83/go-md2man/v2 v2.0.4/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
@@ -108,6 +110,8 @@ github.com/kloudlite/operator v1.1.2-0.20241202071018-cd50cb6011cd h1:mQD6D6YvHr
 github.com/kloudlite/operator v1.1.2-0.20241202071018-cd50cb6011cd/go.mod h1:S6HRSjbED7FH0/sncXt2zxpfVjh/KROhdfFYY/mkf0s=
 github.com/kloudlite/operator/toolkit v0.0.0-20241202071018-cd50cb6011cd h1:r31ZS81lcpkY1RsrdQi9zoN88PXPYujotJI6ntL3b4w=
 github.com/kloudlite/operator/toolkit v0.0.0-20241202071018-cd50cb6011cd/go.mod h1:O38D51XS/ugqMOkoR+sAworO6DpVyWli5GOGZ9F4/6g=
+github.com/kloudlite/operator/toolkit v0.0.0-20241213022814-9012d5473c3d h1:l1umRsYqmN2f4+fpKziz3zJfzxnMW+4YO8QIhYE3jkE=
+github.com/kloudlite/operator/toolkit v0.0.0-20241213022814-9012d5473c3d/go.mod h1:2oy4q08iYDKoYtAPFBeRupw4yfqqBlFPGgaA33vfyxw=
 github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=

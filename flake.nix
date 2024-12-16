@@ -34,8 +34,8 @@
               name = "run";
               pname = "run";
               src = fetchurl {
-                url = "https://github.com/nxtcoder17/Runfile/releases/download/nightly/run-linux-amd64";
-                sha256 = "sha256-H6On0hZrPjm679mSb2gdcj++aQjLPo9Z7F1m/PDsBTo=";
+                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.1.2/run-linux-amd64";
+                sha256 = "sha256-vAnENb2BhIKHSkx19pTytlv03RIOzUxoxn2nRrk6Zd8=";
               };
               unpackPhase = ":";
               buildInputs = [ curl ];

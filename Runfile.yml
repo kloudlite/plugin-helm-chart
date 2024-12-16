@@ -59,7 +59,8 @@ tasks:
     env:
       CGO_ENABLED: 0
       GOARCH:
-        required: true
+        default:
+          sh: "go env GOARCH"
     cmd:
       - go build -ldflags='-s -w' -o ./bin/plugin-helm-controller-$GOARCH ./cmd
 
