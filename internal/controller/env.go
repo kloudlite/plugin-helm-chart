@@ -1,4 +1,4 @@
-package env
+package controller
 
 import "github.com/codingconcepts/env"
 

@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/kloudlite/operator/toolkit/errors"
-	"github.com/kloudlite/operator/toolkit/logging"
 	"github.com/kloudlite/operator/toolkit/plugin"
 	rApi "github.com/kloudlite/operator/toolkit/reconciler"
 	stepResult "github.com/kloudlite/operator/toolkit/reconciler/step-result"
@@ -42,7 +41,6 @@ import (
 	"github.com/kloudlite/operator/toolkit/kubectl"
 	v1 "github.com/kloudlite/plugin-helm-chart/api/v1"
 	"github.com/kloudlite/plugin-helm-chart/internal/controller/templates"
-	"github.com/kloudlite/plugin-helm-chart/internal/env"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -56,14 +54,16 @@ type HelmChartReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	logger     logging.Logger
-	Name       string
-	yamlClient kubectl.YAMLClient
-
-	Env *env.Env
+	Env        *Env
+	YAMLClient kubectl.YAMLClient
 
 	templateInstallOrUpgradeJob []byte
 	templateUninstallJob        []byte
+}
+
+// GetName implements reconciler.Reconciler.
+func (r *HelmChartReconciler) GetName() string {
+	return "plugin-helm-chart"
 }
 
 const (
@@ -93,7 +93,7 @@ const (
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *HelmChartReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	req, err := rApi.NewRequest(rApi.NewReconcilerCtx(ctx, r.logger), r.Client, request.NamespacedName, &v1.HelmChart{})
+	req, err := rApi.NewRequest(ctx, r.Client, request.NamespacedName, &v1.HelmChart{})
 	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -318,9 +318,9 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 			return check.Failed(err)
 		}
 
-		fmt.Printf("YAML: ---\n%s\n---\n", b)
+		// fmt.Printf("YAML: ---\n%s\n---\n", b)
 
-		rr, err := r.yamlClient.ApplyYAML(ctx, b)
+		rr, err := r.YAMLClient.ApplyYAML(ctx, b)
 		if err != nil {
 			return check.Failed(err)
 		}
@@ -467,7 +467,7 @@ func (r *HelmChartReconciler) startUninstallJob(req *rApi.Request[*v1.HelmChart]
 			return check.Failed(err)
 		}
 
-		rr, err := r.yamlClient.ApplyYAML(ctx, b)
+		rr, err := r.YAMLClient.ApplyYAML(ctx, b)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "unable to create new content in namespace testing-plugin-helm-chart because it is being terminated") {
 				// NOTE: namespace is already getting deleted anyway, no need to run the job
@@ -522,17 +522,21 @@ func (r *HelmChartReconciler) startUninstallJob(req *rApi.Request[*v1.HelmChart]
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.Client = mgr.GetClient()
-	r.Scheme = mgr.GetScheme()
-	r.logger = logging.NewOrDie(&logging.Options{
-		Prefix:          "plugin-helm-chart.kloudlite",
-		ShowTimestamp:   false,
-		ShowCaller:      true,
-		ShowDebugLogs:   false,
-		DevelopmentMode: false,
-	})
-	// r.logger = logging.NewOrDie(&logging.Options{Name: "plugin-helm-chart.kloudlite"})
-	r.yamlClient = kubectl.NewYAMLClientOrDie(mgr.GetConfig(), kubectl.YAMLClientOpts{})
+	if r.Client == nil {
+		r.Client = mgr.GetClient()
+	}
+
+	if r.Scheme == nil {
+		r.Scheme = mgr.GetScheme()
+	}
+
+	if r.YAMLClient == nil {
+		return fmt.Errorf("yamlclient must be set")
+	}
+
+	if r.Env == nil {
+		return fmt.Errorf("env must be set")
+	}
 
 	var err error
 
@@ -545,8 +549,6 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
-
-	r.Env, err = env.LoadEnv()
 
 	builder := ctrl.NewControllerManagedBy(mgr).For(&v1.HelmChart{}).Named("plugin-helm-chart")
 	builder.Owns(&batchv1.Job{})
