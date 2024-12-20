@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/kloudlite/operator/toolkit/errors"
-	"github.com/kloudlite/operator/toolkit/plugin"
 	rApi "github.com/kloudlite/operator/toolkit/reconciler"
 	stepResult "github.com/kloudlite/operator/toolkit/reconciler/step-result"
 	"github.com/kloudlite/plugin-helm-chart/constants"
@@ -363,40 +362,13 @@ func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) s
 		return check.Completed()
 	}
 
-	var getSecret plugin.GetSecret = func(secretName string) (map[string]string, error) {
-		s, err := rApi.Get(ctx, r.Client, fn.NN(obj.Namespace, secretName), &corev1.Secret{})
-		if err != nil {
-			return nil, err
-		}
-		m := make(map[string]string, len(s.Data))
-		for k, v := range s.Data {
-			m[k] = string(v)
-		}
-		return m, nil
-	}
-
-	var getConfigMap plugin.GetConfigMap = func(secretName string) (map[string]string, error) {
-		s, err := rApi.Get(ctx, r.Client, fn.NN(obj.Namespace, secretName), &corev1.ConfigMap{})
-		if err != nil {
-			return nil, err
-		}
-		m := make(map[string]string, len(s.Data)+len(s.BinaryData))
-		for k, v := range s.Data {
-			m[k] = string(v)
-		}
-		for k, v := range s.BinaryData {
-			m[k] = string(v)
-		}
-		return m, nil
-	}
-
 	valuesMap := struct {
 		HelmReleaseName string
 	}{
 		HelmReleaseName: obj.Name,
 	}
 
-	m, err := obj.Export.ParseKV(getSecret, getConfigMap, valuesMap)
+	m, err := obj.Export.ParseKV(ctx, r.Client, obj.Namespace, valuesMap)
 	if err != nil {
 		return check.Failed(errors.NewEf(err, ""))
 	}
