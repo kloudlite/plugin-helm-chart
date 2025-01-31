@@ -45,8 +45,6 @@ spec:
                 type: string
               viaSecret:
                 type: string
-            required:
-            - template
             type: object
           kind:
             description: |-
@@ -1010,7 +1008,7 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                  resource:
+                  resources:
                     properties:
                       cpu:
                         properties:
@@ -1075,8 +1073,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                required:
-                - resource
                 type: object
               postInstall:
                 type: string

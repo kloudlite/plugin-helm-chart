@@ -358,14 +358,17 @@ func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) s
 	ctx, obj := req.Context(), req.Object
 	check := rApi.NewRunningCheck(ProcessExports, req)
 
-	if obj.Export.Template == "" {
+	if obj.Export.Template == "" || obj.Export.ViaSecret == "" {
+		req.Logger.Info("export.template or export.viaSecret field is not set, skipping export processing")
 		return check.Completed()
 	}
 
 	valuesMap := struct {
-		HelmReleaseName string
+		HelmReleaseName      string
+		HelmReleaseNamespace string
 	}{
-		HelmReleaseName: obj.Name,
+		HelmReleaseName:      obj.Name,
+		HelmReleaseNamespace: obj.Namespace,
 	}
 
 	m, err := obj.Export.ParseKV(ctx, r.Client, obj.Namespace, valuesMap)

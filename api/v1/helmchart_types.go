@@ -36,7 +36,7 @@ type HelmJobVars struct {
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
 
-	Resource types.Resource `json:"resource"`
+	Resources types.Resource `json:"resources,omitempty"`
 }
 
 // HelmChartSpec defines the desired state of HelmChart.
