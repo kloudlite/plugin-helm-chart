@@ -353,7 +353,15 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 		return check.Completed()
 	}
 
-	return check.Failed(fmt.Errorf("install or upgrade job failed"))
+	if job.Status.Active > 0 {
+		return check.StillRunning(fmt.Errorf("waiting for install/upgrade job to finish"))
+	}
+
+	if job.Status.Failed > 0 {
+		return check.Failed(fmt.Errorf("install or upgrade job failed"))
+	}
+
+	return check.StillRunning(fmt.Errorf("waiting ..."))
 }
 
 func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
