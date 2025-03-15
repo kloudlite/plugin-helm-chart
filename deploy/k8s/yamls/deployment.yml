@@ -1,0 +1,61 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: plugin-helm-chart
+  name: plugin-helm-chart
+  namespace: plugin-helm-chart
+spec:
+  replicas: 1
+  selector:
+    matchLabels: &match-labels
+      control-plane: plugin-helm-chart
+  template:
+    metadata:
+      labels: *match-labels
+    spec:
+      containers:
+        - args:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=127.0.0.1:8080
+            - --leader-elect
+          image: ghcr.io/kloudlite/plugin-helm-chart:latest
+          imagePullPolicy: Always
+          env:
+            - name: MAX_CONCURRENT_RECONCILES
+              value: "5"
+
+            - name: HELM_JOB_IMAGE
+              value: "ghcr.io/kloudlite/kloudlite/operator/workers/helm-job-runner:v1.1.5"
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          name: manager
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 200m
+              memory: 200Mi
+            requests:
+              cpu: 150m
+              memory: 150Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: "plugin-helm-chart"
+      terminationGracePeriodSeconds: 10
+
