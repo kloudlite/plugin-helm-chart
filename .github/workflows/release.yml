@@ -1,4 +1,4 @@
-name: Release
+name: building api with nix
 
 on:
   workflow_dispatch:
@@ -7,42 +7,23 @@ on:
         type: string
         description: "image_tag"
         required: true
-        default: ""
-
-  push:
+        default: "latest"
 
 permissions:
   contents: read
   packages: write
 
 jobs:
-  build-image:
+  release:
     runs-on: ubuntu-latest
-    name: plugin/helm-charts image
+    name: ${{ matrix.images.name }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: kloudlite/actions/setup-cache-go@v1
-        with:
-          cache_key: "run-${{ matrix.platform }}-${{ matrix.arch }}"
-          working_directory: .
-
-      - uses: kloudlite/actions/generate-image-tag@v1
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - uses: kloudlite/actions/setup-nix-cachix@v1
         with:
           flake_lock: "./flake.lock"
           nix_develop_arguments: ".#default"
-          cachix_cache_name: ${{ secrets.CACHIX_CACHE_NAME }}
+          cachix_cache_name: ${{secrets.CACHIX_CACHE_NAME }}
           cachix_auth_token:  ${{ secrets.CACHIX_AUTH_TOKEN }}
-
-      - uses: kloudlite/actions/setup-docker@v1
-        with:
-          docker_registry: "ghcr.io"
-          docker_username: ${{ github.actor }}
-          docker_password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Binary
-        shell: bash
-        run: |+
-          run build image=ghcr.io/${{ github.repository }}:$IMAGE_TAG
