@@ -30,13 +30,13 @@ spec:
               set -o pipefail
               set -o errexit
 
-              helm repo add helm-repo {{.ChartRepoURL}}
-              helm repo update helm-repo
-
               {{- if .PreInstall }}
               echo "running pre-install job script"
               {{ .PreInstall | nindent 14 }}
               {{- end }}
+
+              helm repo add helm-repo {{.ChartRepoURL}}
+              helm repo update helm-repo
 
               cat > values.yml <<EOF
               {{ .HelmValuesYAML | nindent 14 }}

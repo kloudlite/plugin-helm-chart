@@ -29,13 +29,13 @@ spec:
               set -o pipefail
               set -o errexit
 
-              helm repo add helm-repo {{.ChartRepoURL}}
-              helm repo update helm-repo
-
               {{- if .PreUninstall }}
               echo "running pre-uninstall job script"
               {{ .PreUninstall | nindent 14 }}
               {{- end }}
+
+              helm repo add helm-repo {{.ChartRepoURL}}
+              helm repo update helm-repo
 
               helm uninstall {{.ReleaseName}} --namespace {{.ReleaseNamespace}} | tee /dev/termination-log
 
