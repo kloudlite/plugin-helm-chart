@@ -1,5 +1,5 @@
 {
-  description = "kloudlite plugin helm charts dev environment";
+  description = "kloudlite plugin helm charts dev workspace";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -18,7 +18,6 @@
             # cli tools
             jq
             yq
-            go-task
 
             # source version control
             git
@@ -34,15 +33,14 @@
               name = "run";
               pname = "run";
               src = fetchurl {
-                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.1.2/run-linux-amd64";
-                sha256 = "sha256-vAnENb2BhIKHSkx19pTytlv03RIOzUxoxn2nRrk6Zd8=";
+                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.5.1/run-linux-amd64";
+                sha256 = "sha256-eR/j8+nqoo0khCnBaZg+kqNgnWRTFQDJ7jkRQuo/9Hs=";
               };
               unpackPhase = ":";
-              buildInputs = [ curl ];
-              nativeBuildInputs = [ coreutils makeWrapper ];
+              buildInputs = [ ];
+              nativeBuildInputs = [ ];
               installPhase = ''
                 mkdir -p $out/bin
-                # ls -al $src/
                 cp $src $out/bin/run
                 chmod +x $out/bin/run
               '';

@@ -1,32 +1,4 @@
 tasks:
-  default:
-    silent: true
-    cmds:
-      - |+
-        echo "initialize the project with the following command"
-        echo "task init repo=<git-repo> user=<git-user>"
-
-  init:
-    env:
-      repo:
-        required: true
-      user:
-        required: true
-      domain:
-        default:
-          value: "github.com"
-    # silent: true
-    cmd:
-      - |
-        if [ ! -f "go.mod" ]; then
-          mkdir -p .tmp
-          mv * .tmp
-          repo_url="$domain/$user/$repo"
-          go mod init $repo_url
-          kubebuilder init --domain $repo.$user.$domain --license apache2
-          mv .tmp/* . && rm -rf .tmp
-        fi
-
   new:api:
     desc: create a new api
 
@@ -70,8 +42,12 @@ tasks:
       image:
         required: true
     cmd:
-      - GOARCH=amd64 run go:build || echo "hi"
-      - GOARCH=arm64 run go:build || echo "hello"
+      - run: go:build
+        env:
+          GOARCH: amd64
+      - run: go:build
+        env:
+          GOARCH: arm64
       - docker buildx build -t "$image" --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true --platform linux/amd64,linux/arm64 --build-arg BINARY=./bin/plugin-helm-controller .
 
 
