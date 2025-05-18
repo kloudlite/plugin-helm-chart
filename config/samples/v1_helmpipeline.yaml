@@ -1,0 +1,9 @@
+apiVersion: plugin-helm-chart.kloudlite.github.com/v1
+kind: HelmPipeline
+metadata:
+  labels:
+    app.kubernetes.io/name: plugin-helm-chart
+    app.kubernetes.io/managed-by: kustomize
+  name: helmpipeline-sample
+spec:
+  # TODO(user): Add fields here

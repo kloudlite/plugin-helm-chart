@@ -36,8 +36,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kloudlite/operator/toolkit/kubectl"
+
 	pluginhelmchartkloudlitegithubcomv1 "github.com/kloudlite/plugin-helm-chart/api/v1"
 	"github.com/kloudlite/plugin-helm-chart/internal/controller"
+	"github.com/kloudlite/plugin-helm-chart/internal/controller/helm_pipeline"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -153,6 +155,11 @@ func main() {
 		panic(err)
 	}
 
+	pipelineEnv, err := helm_pipeline.LoadEnv()
+	if err != nil {
+		panic(err)
+	}
+
 	if err = (&controller.HelmChartReconciler{
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
@@ -160,6 +167,14 @@ func main() {
 		Env:        ev,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HelmChart")
+		os.Exit(1)
+	}
+	if err = (&helm_pipeline.HelmPipelineReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Env:    pipelineEnv,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "HelmPipeline")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

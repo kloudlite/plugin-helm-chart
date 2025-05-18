@@ -22,6 +22,8 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- helmpipeline_editor_role.yaml
+- helmpipeline_viewer_role.yaml
 - helmchart_editor_role.yaml
 - helmchart_viewer_role.yaml
 
