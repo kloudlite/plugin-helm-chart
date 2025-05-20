@@ -38,8 +38,8 @@ import (
 	"github.com/kloudlite/operator/toolkit/kubectl"
 
 	pluginhelmchartkloudlitegithubcomv1 "github.com/kloudlite/plugin-helm-chart/api/v1"
-	"github.com/kloudlite/plugin-helm-chart/internal/controller"
-	"github.com/kloudlite/plugin-helm-chart/internal/controller/helm_pipeline"
+	helm_chart "github.com/kloudlite/plugin-helm-chart/internal/controller/helm_chart"
+	helm_pipeline "github.com/kloudlite/plugin-helm-chart/internal/controller/helm_pipeline"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -150,7 +150,7 @@ func main() {
 
 	yamlClient := kubectl.NewYAMLClientOrDie(mgr.GetConfig(), kubectl.YAMLClientOpts{})
 
-	ev, err := controller.LoadEnv()
+	ev, err := helm_chart.LoadEnv()
 	if err != nil {
 		panic(err)
 	}
@@ -160,7 +160,7 @@ func main() {
 		panic(err)
 	}
 
-	if err = (&controller.HelmChartReconciler{
+	if err = (&helm_chart.HelmChartReconciler{
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
 		YAMLClient: yamlClient,
