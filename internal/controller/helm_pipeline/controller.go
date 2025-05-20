@@ -69,6 +69,10 @@ const (
 	cleanupExports string = "cleanup-exports"
 )
 
+const (
+	jobTrackerAnnKey = "kloudlite.io/helmpipeline.tracker"
+)
+
 // +kubebuilder:rbac:groups=plugin-helm-chart.kloudlite.github.com,resources=helmpipelines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=plugin-helm-chart.kloudlite.github.com,resources=helmpipelines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=plugin-helm-chart.kloudlite.github.com,resources=helmpipelines/finalizers,verbs=update
@@ -235,8 +239,64 @@ func valuesToYaml(values map[string]apiextensionsv1.JSON) (string, error) {
 	return string(b), nil
 }
 
-func (r *HelmPipelineReconciler) createInstallJob(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
+type jobOpType string
+
+const (
+	InstallOp   jobOpType = "install"
+	UninstallOp jobOpType = "uninstall"
+)
+
+// runPipelineJob builds, creates (if needed) and tracks a Job from a template
+// - opType must be install|uninstall
+func (r *HelmPipelineReconciler) runPipelineJob(req *reconciler.Request[*v1.HelmPipeline], check *reconciler.CheckWrapper[*v1.HelmPipeline], jobSpec []byte, op jobOpType) step_result.Result {
 	ctx, obj := req.Context(), req.Object
+
+	annVal := fmt.Sprintf("%d/%s", obj.GetGeneration(), op)
+	name := fmt.Sprintf("%s-pipeline-job", obj.Name)
+
+	jt, err := job_helper.NewJobTracker(ctx, r.Client, job_helper.JobTrackerArgs{
+		JobNamespace: obj.Namespace,
+		JobName:      name,
+		IsTargetJob: func(job *batchv1.Job) bool {
+			return job.Annotations[jobTrackerAnnKey] == annVal
+		},
+	})
+	if err != nil {
+		if !apiErrors.IsNotFound(err) {
+			return check.Failed(err)
+		}
+		job := &batchv1.Job{
+			TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            name,
+				Namespace:       obj.Namespace,
+				Labels:          obj.GetLabels(),
+				Annotations:     fn.MapMerge(fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."), map[string]string{jobTrackerAnnKey: annVal}),
+				OwnerReferences: []metav1.OwnerReference{fn.AsOwner(obj, true)},
+			},
+		}
+		if err := yaml.Unmarshal(jobSpec, &job.Spec); err != nil {
+			return check.Failed(err)
+		}
+		if err := r.Create(ctx, job); err != nil {
+			return check.Failed(err)
+		}
+		return check.StillRunning(errors.New("waiting for job to be created"))
+	}
+
+	phase, msg, err := jt.Process(ctx)
+	obj.Status.Phase = phase
+	if err != nil {
+		return check.Failed(err)
+	}
+	if phase != job_helper.JobPhaseSucceeded {
+		return check.StillRunning(errors.New(msg))
+	}
+	return check.Completed()
+}
+
+func (r *HelmPipelineReconciler) createInstallJob(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
+	obj := req.Object
 	check := reconciler.NewRunningCheck(createInstallJob, req)
 
 	pipelineSteps := make([]templates.Pipeline, 0, len(obj.Spec.Pipeline))
@@ -266,63 +326,11 @@ func (r *HelmPipelineReconciler) createInstallJob(req *reconciler.Request[*v1.He
 		return check.Failed(err)
 	}
 
-	uniqueAnnKey := "kloudlite.io/helmpipeline.tracker"
-	uniqueAnnValue := fmt.Sprintf("%d/install", obj.GetGeneration())
-
-	jobName := fmt.Sprintf("%s-pipeline-job", obj.Name)
-
-	jt, err := job_helper.NewJobTracker(ctx, r.Client, job_helper.JobTrackerArgs{
-		JobNamespace: obj.Namespace,
-		JobName:      jobName,
-		IsTargetJob: func(job *batchv1.Job) bool {
-			return job.Annotations[uniqueAnnKey] == uniqueAnnValue
-		},
-	})
-	if err != nil {
-		if !apiErrors.IsNotFound(err) {
-			return check.Failed(err)
-		}
-
-		job := &batchv1.Job{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Job",
-				APIVersion: "batch/v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            jobName,
-				Namespace:       obj.Namespace,
-				Labels:          obj.GetLabels(),
-				Annotations:     fn.MapMerge(fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."), map[string]string{uniqueAnnKey: uniqueAnnValue}),
-				OwnerReferences: []metav1.OwnerReference{fn.AsOwner(obj, true)},
-			},
-			Spec: batchv1.JobSpec{},
-		}
-
-		if err := yaml.Unmarshal(b, &job.Spec); err != nil {
-			return check.Failed(err)
-		}
-
-		if err := r.Create(ctx, job); err != nil {
-			return check.Failed(err)
-		}
-
-		return check.StillRunning(errors.New("waiting for job to be created"))
-	}
-
-	phase, msg, err := jt.Process(ctx)
-	obj.Status.Phase = phase
-	if err != nil {
-		return check.Failed(err)
-	}
-
-	if phase != job_helper.JobPhaseSucceeded {
-		return check.StillRunning(errors.New(msg))
-	}
-	return check.Completed()
+	return r.runPipelineJob(req, check, b, InstallOp)
 }
 
 func (r *HelmPipelineReconciler) createUninstallJob(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
-	ctx, obj := req.Context(), req.Object
+	obj := req.Object
 	check := reconciler.NewRunningCheck(createUninstallJob, req)
 
 	b, err := templates.ParseBytes(r.templateUninstallJobSpec, templates.HelmPipelineUninstallJobSpecVars{
@@ -338,60 +346,7 @@ func (r *HelmPipelineReconciler) createUninstallJob(req *reconciler.Request[*v1.
 		return check.Failed(err)
 	}
 
-	uniqueAnnKey := "kloudlite.io/helmpipeline.tracker"
-	uniqueAnnValue := fmt.Sprintf("%d/uninstall", obj.GetGeneration())
-
-	jobName := fmt.Sprintf("%s-pipeline-job", obj.Name)
-
-	jt, err := job_helper.NewJobTracker(ctx, r.Client, job_helper.JobTrackerArgs{
-		JobNamespace: obj.Namespace,
-		JobName:      jobName,
-		IsTargetJob: func(job *batchv1.Job) bool {
-			return job.Annotations[uniqueAnnKey] == uniqueAnnValue
-		},
-	})
-	if err != nil {
-		if !apiErrors.IsNotFound(err) {
-			return check.Failed(err)
-		}
-
-		job := &batchv1.Job{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Job",
-				APIVersion: "batch/v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            jobName,
-				Namespace:       obj.Namespace,
-				Labels:          obj.GetLabels(),
-				Annotations:     fn.MapMerge(fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."), map[string]string{uniqueAnnKey: uniqueAnnValue}),
-				OwnerReferences: []metav1.OwnerReference{fn.AsOwner(obj, true)},
-			},
-			Spec: batchv1.JobSpec{},
-		}
-
-		if err := yaml.Unmarshal(b, &job.Spec); err != nil {
-			return check.Failed(err)
-		}
-
-		if err := r.Create(ctx, job); err != nil {
-			return check.Failed(err)
-		}
-
-		return check.StillRunning(errors.New("waiting for job to be created"))
-	}
-
-	phase, msg, err := jt.Process(ctx)
-	obj.Status.Phase = phase
-	if err != nil {
-		return check.Failed(err)
-	}
-
-	if phase != job_helper.JobPhaseSucceeded {
-		return check.StillRunning(errors.New(msg))
-	}
-
-	return check.Completed()
+	return r.runPipelineJob(req, check, b, UninstallOp)
 }
 
 func (r *HelmPipelineReconciler) processExports(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
