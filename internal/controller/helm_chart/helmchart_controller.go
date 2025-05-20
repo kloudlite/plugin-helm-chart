@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package helm_chart
 
 import (
 	"context"
@@ -39,7 +39,7 @@ import (
 	job_manager "github.com/kloudlite/operator/toolkit/job-helper"
 	"github.com/kloudlite/operator/toolkit/kubectl"
 	v1 "github.com/kloudlite/plugin-helm-chart/api/v1"
-	"github.com/kloudlite/plugin-helm-chart/internal/controller/templates"
+	"github.com/kloudlite/plugin-helm-chart/internal/controller/helm_chart/templates"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -361,7 +361,7 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 		return check.Failed(fmt.Errorf("install or upgrade job failed"))
 	}
 
-	return check.StillRunning(fmt.Errorf("waiting ..."))
+	return check.StillRunning(fmt.Errorf("waiting for installation job to start"))
 }
 
 func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) stepResult.Result {

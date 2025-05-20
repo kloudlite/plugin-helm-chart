@@ -22,8 +22,10 @@ tasks:
       - make generate
 
   dev:
-    env:
-      HELM_JOB_IMAGE: "ghcr.io/kloudlite/kloudlite/operator/workers/helm-job-runner:v1.1.4"
+    # env:
+    #   HELM_JOB_IMAGE: "ghcr.io/kloudlite/kloudlite/operator/workers/helm-job-runner:v1.1.4"
+    dotenv:
+      - .secrets/env
     cmd:
       - make run
 

@@ -1,4 +1,4 @@
-package controller
+package helm_chart
 
 import "github.com/codingconcepts/env"
 

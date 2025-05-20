@@ -1,13 +1,15 @@
----
+# permissions for end users to edit helmpipelines.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  labels:
+    app.kubernetes.io/name: plugin-helm-chart
+    app.kubernetes.io/managed-by: kustomize
+  name: helmpipeline-editor-role
 rules:
 - apiGroups:
   - plugin-helm-chart.kloudlite.github.com
   resources:
-  - helmcharts
   - helmpipelines
   verbs:
   - create
@@ -20,16 +22,6 @@ rules:
 - apiGroups:
   - plugin-helm-chart.kloudlite.github.com
   resources:
-  - helmcharts/finalizers
-  - helmpipelines/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - plugin-helm-chart.kloudlite.github.com
-  resources:
-  - helmcharts/status
   - helmpipelines/status
   verbs:
   - get
-  - patch
-  - update

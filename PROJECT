@@ -16,4 +16,12 @@ resources:
   kind: HelmChart
   path: github.com/kloudlite/plugin-helm-chart/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: plugin-helm-chart.kloudlite.github.com
+  kind: HelmPipeline
+  path: github.com/kloudlite/plugin-helm-chart/api/v1
+  version: v1
 version: "3"

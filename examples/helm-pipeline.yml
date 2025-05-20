@@ -1,0 +1,29 @@
+apiVersion: plugin-helm-chart.kloudlite.github.com/v1
+kind: HelmPipeline
+metadata:
+  name: helm-pipeline-test
+  namespace: test
+spec:
+  pipeline:
+    - chart:
+        url: "https://nxtcoder17.github.io/helm-charts"
+        version: "v1.0.0"
+        name: "playground"
+      release:
+        name: playground
+        namespace: test
+      helmValues: {}
+
+    - chart:
+        name: nats
+        url: https://nats-io.github.io/k8s/helm/charts/
+        version: 1.3.6
+
+      release:
+        name: nats
+        namespace: test
+
+      helmValues:
+        reloader:
+          enabled: false
+
