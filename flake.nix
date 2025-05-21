@@ -9,6 +9,11 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
+        arch =
+          if pkgs.stdenv.isAarch64 then "arm64"
+          else if pkgs.stdenv.isx86_64 then "amd64"
+          else throw "Unsupported architecture";
+
       in
       {
         devShells.default = pkgs.mkShell {
@@ -35,7 +40,7 @@
               name = "run";
               pname = "run";
               src = fetchurl {
-                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.5.2/run-linux-amd64";
+                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.5.2/run-linux-${arch}";
                 sha256 = "sha256-fxYRh2ndLf8zMhNiBo+aPI9UPtqndUkCWKGYqJ2tOpQ=";
               };
               unpackPhase = ":";
