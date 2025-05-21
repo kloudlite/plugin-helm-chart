@@ -15,6 +15,8 @@
           # hardeningDisable = [ "all" ];
 
           buildInputs = with pkgs; [
+            bash
+
             # cli tools
             jq
             yq
@@ -33,8 +35,8 @@
               name = "run";
               pname = "run";
               src = fetchurl {
-                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.5.1/run-linux-amd64";
-                sha256 = "sha256-eR/j8+nqoo0khCnBaZg+kqNgnWRTFQDJ7jkRQuo/9Hs=";
+                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.5.2/run-linux-amd64";
+                sha256 = "sha256-fxYRh2ndLf8zMhNiBo+aPI9UPtqndUkCWKGYqJ2tOpQ=";
               };
               unpackPhase = ":";
               buildInputs = [ ];
@@ -50,6 +52,25 @@
           shellHook = ''
           '';
         };
+
+        packages.helm-job-runner = pkgs.stdenv.mkDerivation {
+          name = "helm-job-runner";
+          src = pkgs.buildEnv {
+            name = "helm-job-runner";
+            paths = with pkgs;
+              [
+                bash
+                kubernetes-helm
+                curl
+                kubectl
+                envsubst
+                jq
+                busybox
+              ];
+          };
+          installPhase = "cp -r $src $out/";
+        };
+
       }
     );
 }

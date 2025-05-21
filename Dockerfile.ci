@@ -1,0 +1,41 @@
+FROM alpine:latest AS builder
+RUN apk add nix
+WORKDIR /app
+
+ENV GOCACHE="/build/root/.cache/go-build"
+ENV GOARCH=${TARGETARCH}
+
+# RUN rm -rf /nix/store
+ARG BINARY TARGETARCH
+
+# Mount your local /nix/store for cache re-use
+RUN --mount=type=cache,target=/nix,from=nixos/nix:2.21.1,source=/nix \
+  --mount=type=cache,target=/root/.cache \
+  --mount=type=cache,mode=0777,target=${GOCACHE} \
+  --mount=type=bind,target=/app \
+  <<EOF
+  cat > /tmp/script.sh <<EOS
+#! nix develop
+  set -o nounset
+	set -o pipefail
+	set -o errexit
+
+  go mod download
+  run go:build
+EOS
+
+  nix \
+    --extra-experimental-features "nix-command flakes" \
+    --option filter-syscalls false \
+    develop --command bash /tmp/script.sh
+EOF
+
+FROM scratch
+
+WORKDIR /app
+
+ARG TARGETARCH
+# COPY --from=builder /tmp/nix-store-closure /nix/store
+COPY --from=builder /tmp/build/bin/plugin-helm-controller-$TARGETARCH /app/bin/plugin-helm-controller
+
+ENTRYPOINT ["/app/bin/plugin-helm-controller"]

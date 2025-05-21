@@ -1,0 +1,91 @@
+name: Helm Job Runner Image
+
+on:
+  workflow_dispatch:
+    # inputs:
+    #   version: 
+    #     type: string
+    #     description: "version"
+    #     required: true
+    #     default: "latest"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  helm-job-runner:
+    strategy:
+      fail-fast: true
+      matrix:
+        arch:
+          - amd64
+          - arm64
+        include:
+          - arch: amd64
+            runner: "ubuntu-24.04"
+          - arch: arm64
+            runner: "ubuntu-24.04-arm"
+
+    runs-on: ${{ matrix.runner }}
+    name: helm-job-runner-${{matrix.arch}}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: kloudlite/actions/setup-docker@v1
+        with:
+          docker_registry: "ghcr.io"
+          docker_username: ${{ github.actor }}
+          docker_password: ${{ github.token }}
+
+      - uses: kloudlite/actions/setup-nix-cachix@v1
+        with:
+          flake_lock: "./flake.lock"
+          nix_develop_arguments: ".#default"
+          cachix_cache_name: ${{secrets.CACHIX_CACHE_NAME }}
+          cachix_auth_token:  ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - uses: nxtcoder17/actions/metadata@main
+        id: meta
+
+      - shell: bash
+        env:
+          IMAGE: "ghcr.io/${{ github.repository }}/helm-job-runner"
+          BUILDX_CACHE_IMAGE: "ghcr.io/${{ github.repository }}/helm-job-runner:buildx-cache"
+        run: |+
+          echo "${{steps.meta.outputs}}"
+          run helm-job-runner image=$IMAGE buildx_cache=$BUILDX_CACHE_IMAGE tag=${{steps.meta.outputs.version}}-${{matrix.arch}}
+
+  helm-job-runner-manifest:
+    runs-on: ubuntu-latest
+    name: helm-job-runner-manifest
+    needs:
+      - helm-job-runner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: kloudlite/actions/setup-docker@v1
+        with:
+          docker_registry: "ghcr.io"
+          docker_username: ${{ github.actor }}
+          docker_password: ${{ github.token }}
+
+      - uses: kloudlite/actions/setup-nix-cachix@v1
+        with:
+          flake_lock: "./flake.lock"
+          nix_develop_arguments: ".#default"
+          cachix_cache_name: ${{secrets.CACHIX_CACHE_NAME }}
+          cachix_auth_token:  ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - uses: nxtcoder17/actions/metadata@main
+        id: meta
+
+      - shell: bash
+        env:
+          IMAGE: "ghcr.io/${{ github.repository }}/helm-job-runner"
+          tag: "${{ steps.meta.outputs.version }}"
+        run: |+
+          docker buildx imagetools create -t $IMAGE:$tag $IMAGE:$tag-amd64 $IMAGE:$tag-arm64
+

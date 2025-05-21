@@ -30,6 +30,9 @@ tasks:
       - make run
 
   go:build:
+    sh:
+      - bash
+      - -c
     env:
       CGO_ENABLED: 0
       GOARCH:
@@ -53,3 +56,19 @@ tasks:
       - docker buildx build -t "$image" --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true --platform linux/amd64,linux/arm64 --build-arg BINARY=./bin/plugin-helm-controller .
 
 
+  helm-job-runner:
+    dir: ./IMAGES/helm-job-runner
+    env:
+      image: "ghcr.io/kloudlite/plugin-helm-chart/helm-job-runner"
+      buildx_cache: "ghcr.io/kloudlite/plugin-helm-chart/helm-job-runner:buildx-cache"
+      platforms: "linux/amd64,linux/arm64"
+      tag:
+        required: true
+    cmd:
+      - docker buildx build -f Dockerfile-nix -t "$image:$tag" 
+          --cache-to type=registry,ref="$buildx_cache",mode=max,compression=zstd,compression-level=12,force-compression=true
+          --cache-from type=registry,ref="$buildx_cache"
+          --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true
+          --build-context project-root=../..
+          --platform $platforms
+          .
