@@ -1,0 +1,82 @@
+name: Plugin Helm Controller Image
+
+on:
+  workflow_dispatch:
+    # inputs:
+    #   version: 
+    #     type: string
+    #     description: "version"
+    #     required: true
+    #     default: "latest"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-controller:
+    strategy:
+      fail-fast: true
+      matrix:
+        arch:
+          - amd64
+          - arm64
+        include:
+          - arch: amd64
+            runner: "ubuntu-24.04"
+          - arch: arm64
+            runner: "ubuntu-24.04-arm"
+
+    runs-on: ${{ matrix.runner }}
+    name: build-controller-${{matrix.arch}}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: nxtcoder17/actions/setup-docker@main
+        with:
+          docker_registry: "ghcr.io"
+          docker_username: ${{ github.actor }}
+          docker_password: ${{ github.token }}
+          qemu: false
+
+      - uses: nxtcoder17/actions/metadata@main
+        id: meta
+
+      - shell: bash
+        env:
+          IMAGE: "ghcr.io/${{ github.repository }}/controller"
+          BUILDX_CACHE_IMAGE: "ghcr.io/${{ github.repository }}/controller:buildx-cache-${{ matrix.arch }}"
+        run: |+
+          docker buildx build -f Dockerfile.ci -t "$IMAGE:${{steps.meta.outputs.version}}-${{ matrix.arch }}" \
+              --cache-to type=registry,ref="$BUILDX_CACHE_IMAGE",mode=max,compression=zstd,compression-level=12,force-compression=true \
+              --cache-from type=registry,ref="$BUILDX_CACHE_IMAGE" \
+              --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true \
+              .
+
+  build-controller-image-manifest:
+    runs-on: ubuntu-latest
+    name: build-controller-image-manifest
+    needs:
+      - build-controller
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: nxtcoder17/actions/setup-docker@main
+        with:
+          docker_registry: "ghcr.io"
+          docker_username: ${{ github.actor }}
+          docker_password: ${{ github.token }}
+          qemu: false
+
+      - uses: nxtcoder17/actions/metadata@main
+        id: meta
+
+      - shell: bash
+        env:
+          IMAGE: "ghcr.io/${{ github.repository }}/controller"
+          tag: "${{ steps.meta.outputs.version }}"
+        run: |+
+          docker buildx imagetools create -t $IMAGE:$tag $IMAGE:$tag-amd64 $IMAGE:$tag-arm64
+

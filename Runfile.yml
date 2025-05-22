@@ -29,19 +29,15 @@ tasks:
     cmd:
       - make run
 
-  go:build:
-    sh:
-      - bash
-      - -c
+  build:
     env:
       CGO_ENABLED: 0
-      GOARCH:
-        default:
-          sh: "go env GOARCH"
+      binary_out:
+        default: "./bin/plugin-helm-controller"
     cmd:
-      - go build -ldflags='-s -w' -o ./bin/plugin-helm-controller-$GOARCH ./cmd
+      - go build -ldflags='-s -w' -o "$binary_out" ./cmd
 
-  build:
+  image:build:
     env:
       HELM_JOB_IMAGE: "ghcr.io/kloudlite/kloudlite/operator/workers/helm-job-runner:v1.1.4"
       image:
@@ -55,13 +51,20 @@ tasks:
           GOARCH: arm64
       - docker buildx build -t "$image" --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true --platform linux/amd64,linux/arm64 --build-arg BINARY=./bin/plugin-helm-controller .
 
+  image:build:ci:
+    env:
+      image:
+        required: true
+    cmd:
+      - docker buildx build -f Dockerfile.ci -t "$image" --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true --platform linux/amd64 --build-arg BINARY=./bin/plugin-helm-controller .
+
+
 
   helm-job-runner:
     dir: ./IMAGES/helm-job-runner
     env:
       image: "ghcr.io/kloudlite/plugin-helm-chart/helm-job-runner"
       buildx_cache: "ghcr.io/kloudlite/plugin-helm-chart/helm-job-runner:buildx-cache"
-      platforms: "linux/amd64,linux/arm64"
       tag:
         required: true
     cmd:
@@ -70,5 +73,4 @@ tasks:
           --cache-from type=registry,ref="$buildx_cache"
           --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true
           --build-context project-root=../..
-          --platform $platforms
           .

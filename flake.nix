@@ -40,8 +40,10 @@
               name = "run";
               pname = "run";
               src = fetchurl {
-                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.5.2/run-linux-${arch}";
-                sha256 = "sha256-fxYRh2ndLf8zMhNiBo+aPI9UPtqndUkCWKGYqJ2tOpQ=";
+                url = "https://github.com/nxtcoder17/Runfile/releases/download/v1.5.3/run-linux-${arch}";
+                sha256 =
+                  if arch == "amd64" then "sha256-BRTgIIg1D+Q4nYN4Z5LoHv+NKamT34qOZZDUxpZkBa0=" else "sha256-wz0ReA/yvZ1ktMGkLc/vMe/gTDpeI6clL+IBYCUo+Yo=
+";
               };
               unpackPhase = ":";
               buildInputs = [ ];
@@ -75,7 +77,6 @@
           };
           installPhase = "cp -r $src $out/";
         };
-
       }
     );
 }
