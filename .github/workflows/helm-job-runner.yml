@@ -39,23 +39,22 @@ jobs:
           docker_username: ${{ github.actor }}
           docker_password: ${{ github.token }}
 
-      - uses: kloudlite/actions/setup-nix-cachix@v1
-        with:
-          flake_lock: "./flake.lock"
-          nix_develop_arguments: ".#default"
-          cachix_cache_name: ${{secrets.CACHIX_CACHE_NAME }}
-          cachix_auth_token:  ${{ secrets.CACHIX_AUTH_TOKEN }}
-
       - uses: nxtcoder17/actions/metadata@main
         id: meta
 
       - shell: bash
         env:
           IMAGE: "ghcr.io/${{ github.repository }}/helm-job-runner"
-          BUILDX_CACHE_IMAGE: "ghcr.io/${{ github.repository }}/helm-job-runner:buildx-cache"
+          BUILDX_CACHE_IMAGE: "ghcr.io/${{ github.repository }}/helm-job-runner:buildx-cache-${{ matrix.arch }}"
         run: |+
-          echo "${{steps.meta.outputs}}"
-          run helm-job-runner image=$IMAGE buildx_cache=$BUILDX_CACHE_IMAGE tag=${{steps.meta.outputs.version}}-${{matrix.arch}}
+          pushd ./IMAGES/helm-job-runner
+          docker buildx build -f Dockerfile-nix -t "$IMAGE:${{steps.meta.outputs.version}}-${{ matrix.arch }}" \
+              --cache-to type=registry,ref="$BUILDX_CACHE_IMAGE",mode=max,compression=zstd,compression-level=12,force-compression=true \
+              --cache-from type=registry,ref="$BUILDX_CACHE_IMAGE" \
+              --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true \
+              --build-context project-root=../.. \
+              .
+          popd
 
   helm-job-runner-manifest:
     runs-on: ubuntu-latest
@@ -71,13 +70,6 @@ jobs:
           docker_registry: "ghcr.io"
           docker_username: ${{ github.actor }}
           docker_password: ${{ github.token }}
-
-      - uses: kloudlite/actions/setup-nix-cachix@v1
-        with:
-          flake_lock: "./flake.lock"
-          nix_develop_arguments: ".#default"
-          cachix_cache_name: ${{secrets.CACHIX_CACHE_NAME }}
-          cachix_auth_token:  ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - uses: nxtcoder17/actions/metadata@main
         id: meta
