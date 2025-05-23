@@ -49,14 +49,14 @@ spec:
             - --health-probe-bind-address=:8081
             - --metrics-bind-address=127.0.0.1:8080
             - --leader-elect
-          image: ghcr.io/kloudlite/plugin-helm-chart:latest
+          image: ghcr.io/kloudlite/plugin-helm-chart/controller:v1.0.0
           imagePullPolicy: Always
           env:
             - name: MAX_CONCURRENT_RECONCILES
               value: "5"
 
             - name: HELM_JOB_IMAGE
-              value: "ghcr.io/kloudlite/kloudlite/operator/workers/helm-job-runner:v1.1.5"
+              value: "ghcr.io/kloudlite/plugin-helm-chart/helm-job-runner:v1.0.0"
 
           livenessProbe:
             httpGet:
@@ -76,8 +76,8 @@ spec:
               cpu: 200m
               memory: 200Mi
             requests:
-              cpu: 150m
-              memory: 150Mi
+              cpu: 100m
+              memory: 100Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
