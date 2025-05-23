@@ -1,13 +1,14 @@
 name: Helm Job Runner Image
 
 on:
-  workflow_dispatch:
-    # inputs:
-    #   version: 
-    #     type: string
-    #     description: "version"
-    #     required: true
-    #     default: "latest"
+  workflow_dispatch: {}
+
+  push:
+    branches:
+      - master
+
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
