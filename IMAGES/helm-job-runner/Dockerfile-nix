@@ -3,10 +3,6 @@ FROM alpine:latest AS builder
 RUN apk add nix
 WORKDIR /app
 
-# Mount your local /nix/store for cache re-use
-# RUN --mount=type=cache,target=/nix,from=nixos/nix:2.21.1,source=/nix
-# RUN nix --extra-experimental-features "nix-command flakes" --option filter-syscalls false develop --command "echo downloaded nix"
-# COPY --from=nixos/nix:2.21.1 /nix /nix
 RUN --mount=type=cache,from=project-root,source=flake.nix,target=flake.nix \
   --mount=type=cache,from=project-root,source=flake.lock,target=flake.lock \
   <<EOF
@@ -20,9 +16,8 @@ cp -R $(nix-store -qR /tmp/output/result) /tmp/nix-store-closure
 EOF
 
 FROM scratch
-
 WORKDIR /app
 COPY --from=builder /tmp/nix-store-closure /nix/store
 COPY --from=builder /tmp/output/ /app/
-
+USER 1001
 ENV PATH=/app/result/bin
