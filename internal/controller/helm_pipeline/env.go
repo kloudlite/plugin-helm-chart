@@ -4,7 +4,7 @@ import "github.com/codingconcepts/env"
 
 type Env struct {
 	MaxConcurrentReconciles int    `env:"MAX_CONCURRENT_RECONCILES" default:"5"`
-	HelmPipelineJobImage    string `env:"HELM_PIPELINE_JOB_IMAGE"`
+	HelmJobRunnerImage      string `env:"HELM_JOB_RUNNER_IMAGE" required:"true"`
 }
 
 func LoadEnv() (*Env, error) {

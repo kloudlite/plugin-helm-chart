@@ -55,7 +55,7 @@ spec:
             - name: MAX_CONCURRENT_RECONCILES
               value: "5"
 
-            - name: HELM_JOB_IMAGE
+            - name: HELM_JOB_RUNNER_IMAGE
               value: "ghcr.io/kloudlite/plugin-helm-chart/helm-job-runner:v1.0.0"
 
           livenessProbe:

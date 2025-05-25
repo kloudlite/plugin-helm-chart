@@ -3,8 +3,8 @@ package helm_chart
 import "github.com/codingconcepts/env"
 
 type Env struct {
-	MaxConcurrentReconciles int    `env:"MAX_CONCURRENT_RECONCILES" default:"1"`
-	HelmJobImage            string `env:"HELM_JOB_IMAGE" default:"ghcr.io/kloudlite/kloudlite/operator/workers/helm-job-runner:v1.1.4"`
+	MaxConcurrentReconciles int    `env:"MAX_CONCURRENT_RECONCILES" default:"5"`
+	HelmJobRunnerImage      string `env:"HELM_JOB_RUNNER_IMAGE" required:"true"`
 }
 
 func LoadEnv() (*Env, error) {

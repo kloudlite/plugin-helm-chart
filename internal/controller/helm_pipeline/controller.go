@@ -318,7 +318,7 @@ func (r *HelmPipelineReconciler) createInstallJob(req *reconciler.Request[*v1.He
 		PodTolerations:     obj.Spec.HelmJobVars.Tolerations,
 		NodeSelector:       obj.Spec.HelmJobVars.NodeSelector,
 		ServiceAccountName: JobServiceAccountName,
-		Image:              r.Env.HelmPipelineJobImage,
+		Image:              r.Env.HelmJobRunnerImage,
 		Pipeline:           pipelineSteps,
 		BackOffLimit:       1,
 	})
@@ -339,7 +339,7 @@ func (r *HelmPipelineReconciler) createUninstallJob(req *reconciler.Request[*v1.
 		PodTolerations:     obj.Spec.HelmJobVars.Tolerations,
 		NodeSelector:       obj.Spec.HelmJobVars.NodeSelector,
 		ServiceAccountName: JobServiceAccountName,
-		Image:              r.Env.HelmPipelineJobImage,
+		Image:              r.Env.HelmJobRunnerImage,
 		BackOffLimit:       1,
 	})
 	if err != nil {
