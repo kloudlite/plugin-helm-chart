@@ -11,7 +11,6 @@ template:
       runAsNonRoot: true
       runAsUser: 65532 # nonroot user from gcr.io/distroless/static:nonroot image
       runAsGroup: 65532 # nonroot group from gcr.io/distroless/static:nonroot image
-      allowPrivilegeEscalation: false
 
     containers:
       - name: helm
