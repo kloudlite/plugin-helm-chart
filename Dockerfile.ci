@@ -24,8 +24,7 @@ nix \
   develop --command run build binary_out=/tmp/plugin-helm-controller
 EOF
 
-FROM gcr.io/distroless/static
+FROM gcr.io/distroless/static:nonroot
 WORKDIR /home/nonroot
-USER nonroot:nonroot
 COPY --from=builder --chown=nonroot:nonroot /tmp/plugin-helm-controller ./plugin-helm-controller
 ENTRYPOINT ["./plugin-helm-controller"]

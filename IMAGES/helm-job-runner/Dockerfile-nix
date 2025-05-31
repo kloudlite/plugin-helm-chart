@@ -15,9 +15,8 @@ mkdir -p /tmp/nix-store-closure
 cp -R $(nix-store -qR /tmp/output/result) /tmp/nix-store-closure
 EOF
 
-FROM gcr.io/distroless/static
+FROM gcr.io/distroless/static:nonroot
 WORKDIR /home/nonroot
-USER nonroot:nonroot
 COPY --from=builder /tmp/nix-store-closure /nix/store
 COPY --from=builder --chown=nonroot:nonroot /tmp/output/ /app/
 ENV PATH=/app/result/bin
