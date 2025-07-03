@@ -1,0 +1,11 @@
+apiVersion: plugin-helm-chart.kloudlite.github.com/v1
+kind: HelmChart
+metadata:
+  name: helm-pipeline-test
+  namespace: test
+spec:
+  chart:
+    url: "https://nxtcoder17.github.io/helm-charts"
+    version: "v1.0.0"
+    name: "playground"
+  helmValues: {}

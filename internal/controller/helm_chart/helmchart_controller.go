@@ -21,12 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
-	"github.com/kloudlite/operator/toolkit/errors"
-	rApi "github.com/kloudlite/operator/toolkit/reconciler"
-	stepResult "github.com/kloudlite/operator/toolkit/reconciler/step-result"
+	"github.com/kloudlite/kloudlite/operator/toolkit/errors"
+	job_helper "github.com/kloudlite/kloudlite/operator/toolkit/job-helper"
+	"github.com/kloudlite/kloudlite/operator/toolkit/reconciler"
 	"github.com/kloudlite/plugin-helm-chart/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,9 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
-	fn "github.com/kloudlite/operator/toolkit/functions"
-	job_manager "github.com/kloudlite/operator/toolkit/job-helper"
-	"github.com/kloudlite/operator/toolkit/kubectl"
+	fn "github.com/kloudlite/kloudlite/operator/toolkit/functions"
 	v1 "github.com/kloudlite/plugin-helm-chart/api/v1"
 	"github.com/kloudlite/plugin-helm-chart/internal/controller/helm_chart/templates"
 	batchv1 "k8s.io/api/batch/v1"
@@ -53,8 +50,7 @@ type HelmChartReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	Env        *Env
-	YAMLClient kubectl.YAMLClient
+	Env *Env
 
 	templateInstallOrUpgradeJob []byte
 	templateUninstallJob        []byte
@@ -66,7 +62,8 @@ func (r *HelmChartReconciler) GetName() string {
 }
 
 const (
-	JobServiceAccountName = "pl-helm-job-sa"
+	JobServiceAccountName  = "pl-helm-job-sa"
+	ClusterRoleBindingName = JobServiceAccountName + "-rb"
 )
 
 // check names
@@ -92,7 +89,7 @@ const (
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *HelmChartReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
-	req, err := rApi.NewRequest(ctx, r.Client, request.NamespacedName, &v1.HelmChart{})
+	req, err := reconciler.NewRequest(ctx, r.Client, request.NamespacedName, &v1.HelmChart{})
 	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -100,92 +97,47 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	req.PreReconcile()
 	defer req.PostReconcile()
 
-	if req.Object.GetDeletionTimestamp() != nil {
-		if x := r.finalize(req); !x.ShouldProceed() {
-			return x.ReconcilerResponse()
-		}
-		return ctrl.Result{}, nil
-	}
-
-	if step := req.ClearStatusIfAnnotated(); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := req.EnsureLabelsAndAnnotations(); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := req.EnsureFinalizers(rApi.CommonFinalizer); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := req.EnsureCheckList([]rApi.CheckMeta{
-		{Name: HelmJobRBACCreated, Title: "Helm Job RBAC created"},
-		{Name: HelmInstallJobCompleted, Title: "Helm Install Job Created and Completed"},
-	}); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := r.ensureJobRBAC(req); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := r.startInstallJob(req); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := r.processExports(req); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	req.Object.Status.IsReady = true
-	return ctrl.Result{}, nil
+	return reconciler.ReconcileSteps(req, []reconciler.Step[*v1.HelmChart]{
+		{
+			Name:     "setup k8s job RBAC",
+			Title:    "Setup Kubernetes RBAC for running helm job",
+			OnCreate: r.createHelmJobRBAC,
+			OnDelete: nil,
+		},
+		{
+			Name:     "setup helm release job",
+			Title:    "Setup Helm Release Job",
+			OnCreate: r.createHelmInstallJob,
+			OnDelete: r.createHelmUninstallJob,
+		},
+		{
+			Name:     "process exports",
+			Title:    "Process helm chart exports",
+			OnCreate: r.createProcessExports,
+			OnDelete: r.deleteProcessedExports,
+		},
+	})
 }
 
-func (r *HelmChartReconciler) finalize(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
-	obj := req.Object
-	check := rApi.NewRunningCheck("finalizing", req)
-
-	deleteCheckList := []rApi.CheckMeta{
-		{Name: HelmUninstallJobCompleted, Title: "Helm Uninstall Lifecycle Applied And Completed"},
-	}
-
-	if !slices.Equal(obj.Status.CheckList, deleteCheckList) {
-		if step := req.EnsureCheckList(deleteCheckList); !step.ShouldProceed() {
-			return step
-		}
-		return check.StillRunning(fmt.Errorf("updating checklist")).RequeueAfter(1 * time.Second)
-	}
-
-	if step := r.startUninstallJob(req); !step.ShouldProceed() {
-		return step
-	}
-
-	return req.Finalize()
-}
-
-func (r *HelmChartReconciler) ensureJobRBAC(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
-	ctx, obj := req.Context(), req.Object
-	check := rApi.NewRunningCheck(HelmJobRBACCreated, req)
-
+func (r *HelmChartReconciler) createHelmJobRBAC(check *reconciler.Check[*v1.HelmChart], obj *v1.HelmChart) reconciler.StepResult {
 	jobSvcAcc := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: JobServiceAccountName, Namespace: obj.Namespace}}
 
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, jobSvcAcc, func() error {
+	if _, err := controllerutil.CreateOrUpdate(check.Context(), r.Client, jobSvcAcc, func() error {
 		if jobSvcAcc.Annotations == nil {
 			jobSvcAcc.Annotations = make(map[string]string, 1)
 		}
-		jobSvcAcc.Annotations[rApi.AnnotationDescriptionKey] = "Service account used by helm charts to run helm release jobs"
+		jobSvcAcc.Annotations[reconciler.AnnotationDescriptionKey] = "Service account used by helm charts to run helm release jobs"
 		return nil
 	}); err != nil {
 		return check.Failed(err)
 	}
 
-	crb := rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-rb", JobServiceAccountName)}}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, &crb, func() error {
+	crb := rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: ClusterRoleBindingName}}
+	if _, err := controllerutil.CreateOrUpdate(check.Context(), r.Client, &crb, func() error {
 		if crb.Annotations == nil {
 			crb.Annotations = make(map[string]string, 1)
 		}
-		crb.Annotations[rApi.AnnotationDescriptionKey] = "Cluster role binding used by helm charts to run helm release jobs"
+		crb.Annotations[reconciler.AnnotationDescriptionKey] = "Cluster role binding used by helm charts to run helm release jobs"
 
 		crb.RoleRef = rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -212,7 +164,7 @@ func (r *HelmChartReconciler) ensureJobRBAC(req *rApi.Request[*v1.HelmChart]) st
 		return check.Failed(err)
 	}
 
-	return check.Completed()
+	return check.Passed()
 }
 
 func valuesToYaml(values map[string]apiextensionsv1.JSON) (string, error) {
@@ -235,27 +187,65 @@ func valuesToYaml(values map[string]apiextensionsv1.JSON) (string, error) {
 	return string(b), nil
 }
 
-func getJobName(suffix string) string {
-	return "helm-job-" + suffix
-}
-
 const (
-	LabelHelmJobType        string = constants.ProjectDomain + "/helm.job-type"
-	LabelHelmChartName      string = constants.ProjectDomain + "/helm.chart-name"
-	LabelResourceGeneration string = constants.ProjectDomain + "/helm.resource-generation"
+	jobTrackerAnnKey string = constants.ProjectDomain + "/helmpipeline"
 )
 
-func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
-	ctx, obj := req.Context(), req.Object
-	check := rApi.NewRunningCheck(HelmInstallJobCompleted, req)
+type jobOpType string
 
-	job := &batchv1.Job{}
-	if err := r.Get(ctx, fn.NN(obj.Namespace, getJobName(obj.Name)), job); err != nil {
+const (
+	InstallOp   jobOpType = "install"
+	UninstallOp jobOpType = "uninstall"
+)
+
+func (r *HelmChartReconciler) runHelmChartJob(check *reconciler.Check[*v1.HelmChart], obj *v1.HelmChart, jobSpec []byte, op jobOpType) reconciler.StepResult {
+	annVal := fmt.Sprintf("%d/%s", obj.GetGeneration(), op)
+	name := fmt.Sprintf("%s-helmchart-job", obj.Name)
+
+	jt, err := job_helper.NewJobTracker(check.Context(), r.Client, job_helper.JobTrackerArgs{
+		JobNamespace: obj.Namespace,
+		JobName:      name,
+		IsTargetJob: func(job *batchv1.Job) bool {
+			return job.Annotations[jobTrackerAnnKey] == annVal
+		},
+	})
+	if err != nil {
 		if !apiErrors.IsNotFound(err) {
 			return check.Failed(err)
 		}
-		job = nil
+		job := &batchv1.Job{
+			TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            name,
+				Namespace:       obj.Namespace,
+				Labels:          obj.GetLabels(),
+				Annotations:     fn.MapMerge(fn.MapFilterWithPrefix(obj.GetAnnotations(), reconciler.ObservabilityAnnotationKey), map[string]string{jobTrackerAnnKey: annVal}),
+				OwnerReferences: []metav1.OwnerReference{fn.AsOwner(obj, true)},
+			},
+		}
+		if err := yaml.Unmarshal(jobSpec, &job.Spec); err != nil {
+			return check.Failed(err)
+		}
+		if err := r.Client.Create(check.Context(), job); err != nil {
+			return check.Failed(err)
+		}
+
+		return check.Abort("waiting for job to be created")
 	}
+
+	phase, msg, err := jt.StartTracking(check.Context())
+	obj.Status.Phase = phase
+	if err != nil {
+		return check.Failed(err)
+	}
+	if phase != job_helper.JobPhaseSucceeded {
+		return check.Abort(msg)
+	}
+	return check.Passed()
+}
+
+func (r *HelmChartReconciler) createHelmInstallJob(check *reconciler.Check[*v1.HelmChart], obj *v1.HelmChart) reconciler.StepResult {
+	ctx := check.Context()
 
 	helmValues := obj.Spec.HelmValues
 
@@ -268,8 +258,8 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 		ann := obj.GetAnnotations()
 		delete(ann, constants.ForceReconcile)
 		obj.SetAnnotations(ann)
-		if err := r.Update(ctx, obj); err != nil {
-			return check.StillRunning(fmt.Errorf("waiting for reconcilation"))
+		if err := r.Client.Update(ctx, obj); err != nil {
+			return check.Errored(err).RequeueAfter(1 * time.Second)
 		}
 	}
 
@@ -278,99 +268,70 @@ func (r *HelmChartReconciler) startInstallJob(req *rApi.Request[*v1.HelmChart]) 
 		return check.Failed(errors.NewEf(err, "converting helm values to YAML"))
 	}
 
-	if job == nil {
-		jobVars := obj.Spec.HelmJobVars
-		if jobVars == nil {
-			jobVars = &v1.HelmJobVars{}
-		}
-
-		b, err := templates.ParseBytes(r.templateInstallOrUpgradeJob, templates.InstallJobVars{
-			Metadata: metav1.ObjectMeta{
-				Name:      getJobName(obj.Name),
-				Namespace: obj.Namespace,
-				Labels: map[string]string{
-					LabelHelmJobType:        "install",
-					LabelHelmChartName:      obj.Name,
-					LabelResourceGeneration: fmt.Sprintf("%d", obj.Generation),
-				},
-				Annotations:     map[string]string{},
-				OwnerReferences: []metav1.OwnerReference{fn.AsOwner(obj, true)},
-			},
-			ObservabilityAnnotations: fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."),
-			ReleaseName:              obj.Name,
-			ReleaseNamespace:         obj.Namespace,
-			Image:                    r.Env.HelmJobRunnerImage,
-			ImagePullPolicy:          "",
-			BackOffLimit:             1,
-			ServiceAccountName:       JobServiceAccountName,
-			Tolerations:              jobVars.Tolerations,
-			Affinity:                 corev1.Affinity{},
-			NodeSelector:             jobVars.NodeSelector,
-			ChartRepoURL:             obj.Spec.Chart.URL,
-			ChartName:                obj.Spec.Chart.Name,
-			ChartVersion:             obj.Spec.Chart.Version,
-			PreInstall:               obj.Spec.PreInstall,
-			PostInstall:              obj.Spec.PostInstall,
-			HelmValuesYAML:           values,
-		})
-		if err != nil {
-			return check.Failed(err)
-		}
-
-		// fmt.Printf("YAML: ---\n%s\n---\n", b)
-
-		rr, err := r.YAMLClient.ApplyYAML(ctx, b)
-		if err != nil {
-			return check.Failed(err)
-		}
-
-		req.AddToOwnedResources(rr...)
-		return check.StillRunning(fmt.Errorf("waiting for job to be created")).RequeueAfter(1 * time.Second)
+	jobVars := obj.Spec.HelmJobVars
+	if jobVars == nil {
+		jobVars = &v1.HelmJobVars{}
 	}
 
-	isMyJob := job.Labels[LabelResourceGeneration] == fmt.Sprintf("%d", obj.Generation) && job.Labels[LabelHelmJobType] == "install"
-
-	if !isMyJob {
-		if !job_manager.HasJobFinished(ctx, r.Client, job) {
-			return check.Failed(fmt.Errorf("waiting for previous jobs to finish execution"))
-		}
-
-		if err := job_manager.DeleteJob(ctx, r.Client, job.Namespace, job.Name); err != nil {
-			return check.Failed(err)
-		}
-
-		return req.Done().RequeueAfter(1 * time.Second)
+	b, err := templates.ParseBytes(r.templateInstallOrUpgradeJob, templates.HelmChartInstallJobSpecParams{
+		PodAnnotations:     fn.MapFilterWithPrefix(obj.GetAnnotations(), reconciler.ObservabilityAnnotationKey),
+		ReleaseName:        obj.Name,
+		ReleaseNamespace:   obj.Namespace,
+		Image:              r.Env.HelmJobRunnerImage,
+		BackOffLimit:       1,
+		ServiceAccountName: JobServiceAccountName,
+		Tolerations:        jobVars.Tolerations,
+		Affinity:           corev1.Affinity{},
+		NodeSelector:       jobVars.NodeSelector,
+		ChartRepoURL:       obj.Spec.Chart.URL,
+		ChartName:          obj.Spec.Chart.Name,
+		ChartVersion:       obj.Spec.Chart.Version,
+		PreInstall:         obj.Spec.PreInstall,
+		PostInstall:        obj.Spec.PostInstall,
+		HelmValuesYAML:     values,
+	})
+	if err != nil {
+		return check.Failed(err)
 	}
 
-	if !job_manager.HasJobFinished(ctx, r.Client, job) {
-		return check.StillRunning(fmt.Errorf("waiting for running job to finish"))
-	}
-
-	fmt.Println("job status", job_manager.HasJobFinished(ctx, r.Client, job), "job", job.Name)
-
-	check.Message = job_manager.GetTerminationLog(ctx, r.Client, job.Namespace, job.Name)
-	if job.Status.Succeeded > 0 {
-		return check.Completed()
-	}
-
-	if job.Status.Active > 0 {
-		return check.StillRunning(fmt.Errorf("waiting for install/upgrade job to finish"))
-	}
-
-	if job.Status.Failed > 0 {
-		return check.Failed(fmt.Errorf("install or upgrade job failed"))
-	}
-
-	return check.StillRunning(fmt.Errorf("waiting for installation job to start"))
+	return r.runHelmChartJob(check, obj, b, InstallOp)
 }
 
-func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
-	ctx, obj := req.Context(), req.Object
-	check := rApi.NewRunningCheck(ProcessExports, req)
+func (r *HelmChartReconciler) createHelmUninstallJob(check *reconciler.Check[*v1.HelmChart], obj *v1.HelmChart) reconciler.StepResult {
+	jobVars := obj.Spec.HelmJobVars
+	if jobVars == nil {
+		jobVars = &v1.HelmJobVars{}
+	}
+
+	b, err := templates.ParseBytes(r.templateUninstallJob, templates.HelmChartUninstallJobSpecParams{
+		PodAnnotations:     fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."),
+		ReleaseName:        obj.Name,
+		ReleaseNamespace:   obj.Namespace,
+		Image:              r.Env.HelmJobRunnerImage,
+		BackOffLimit:       1,
+		ServiceAccountName: JobServiceAccountName,
+		Tolerations:        jobVars.Tolerations,
+		Affinity:           corev1.Affinity{},
+		NodeSelector:       jobVars.NodeSelector,
+		ChartRepoURL:       obj.Spec.Chart.URL,
+		ChartName:          obj.Spec.Chart.Name,
+		ChartVersion:       obj.Spec.Chart.Version,
+		PreUninstall:       obj.Spec.PreUninstall,
+		PostUninstall:      obj.Spec.PostUninstall,
+	})
+	if err != nil {
+		return check.Failed(err)
+	}
+
+	return r.runHelmChartJob(check, obj, b, UninstallOp)
+}
+
+func (r *HelmChartReconciler) createProcessExports(check *reconciler.Check[*v1.HelmChart], obj *v1.HelmChart) reconciler.StepResult {
+	ctx := check.Context()
 
 	if obj.Export.Template == "" || obj.Export.ViaSecret == "" {
-		req.Logger.Info("export.template or export.viaSecret field is not set, skipping export processing")
-		return check.Completed()
+		check.Logger().Info("export.template or export.viaSecret field is not set, skipping export processing")
+		return check.Passed()
 	}
 
 	valuesMap := struct {
@@ -383,7 +344,7 @@ func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) s
 
 	m, err := obj.Export.ParseKV(ctx, r.Client, obj.Namespace, valuesMap)
 	if err != nil {
-		return check.Failed(errors.NewEf(err, ""))
+		return check.Failed(errors.NewEf(err, "failed to parse KV"))
 	}
 
 	if obj.Export.ViaSecret == "" {
@@ -399,110 +360,20 @@ func (r *HelmChartReconciler) processExports(req *rApi.Request[*v1.HelmChart]) s
 		return check.Failed(errors.NewEf(err, "creating/updating export secret"))
 	}
 
-	return check.Completed()
+	return check.Passed()
 }
 
-func (r *HelmChartReconciler) startUninstallJob(req *rApi.Request[*v1.HelmChart]) stepResult.Result {
-	ctx, obj := req.Context(), req.Object
-	check := rApi.NewRunningCheck(HelmUninstallJobCompleted, req)
-
-	job, err := rApi.Get(ctx, r.Client, fn.NN(obj.Namespace, getJobName(obj.Name)), &batchv1.Job{})
-	if err != nil {
-		if !apiErrors.IsNotFound(err) {
-			return check.Failed(err)
-		}
-		job = nil
+func (r *HelmChartReconciler) deleteProcessedExports(check *reconciler.Check[*v1.HelmChart], obj *v1.HelmChart) reconciler.StepResult {
+	if obj.Export.Template == "" || obj.Export.ViaSecret == "" {
+		check.Logger().Info("export.template or export.viaSecret field is not set, skipping export deletion")
+		return check.Passed()
 	}
 
-	if job == nil {
-		jobVars := obj.Spec.HelmJobVars
-		if jobVars == nil {
-			jobVars = &v1.HelmJobVars{}
-		}
-
-		b, err := templates.ParseBytes(r.templateUninstallJob, templates.UnInstallJobVars{
-			Metadata: metav1.ObjectMeta{
-				Name:      getJobName(obj.Name),
-				Namespace: obj.Namespace,
-				Labels: map[string]string{
-					LabelHelmJobType:        "uninstall",
-					LabelHelmChartName:      obj.Name,
-					LabelResourceGeneration: fmt.Sprintf("%d", obj.Generation),
-				},
-				Annotations:     map[string]string{},
-				OwnerReferences: []metav1.OwnerReference{fn.AsOwner(obj, true)},
-			},
-			ObservabilityAnnotations: fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."),
-			ReleaseName:              obj.Name,
-			ReleaseNamespace:         obj.Namespace,
-			Image:                    r.Env.HelmJobRunnerImage,
-			ImagePullPolicy:          "",
-			BackOffLimit:             0,
-			ServiceAccountName:       JobServiceAccountName,
-			Tolerations:              jobVars.Tolerations,
-			Affinity:                 corev1.Affinity{},
-			NodeSelector:             jobVars.NodeSelector,
-			ChartRepoURL:             obj.Spec.Chart.URL,
-			ChartName:                obj.Spec.Chart.Name,
-			ChartVersion:             obj.Spec.Chart.Version,
-			PreUninstall:             obj.Spec.PreInstall,
-			PostUninstall:            obj.Spec.PostInstall,
-		})
-		if err != nil {
-			return check.Failed(err)
-		}
-
-		rr, err := r.YAMLClient.ApplyYAML(ctx, b)
-		if err != nil {
-			if strings.HasSuffix(err.Error(), "unable to create new content in namespace testing-plugin-helm-chart because it is being terminated") {
-				// NOTE: namespace is already getting deleted anyway, no need to run the job
-				return check.Completed()
-			}
-			return check.Failed(err)
-		}
-
-		req.AddToOwnedResources(rr...)
-		return check.StillRunning(fmt.Errorf("waiting for job to be created")).RequeueAfter(1 * time.Second)
-	}
-
-	isMyJob := job.Labels[LabelResourceGeneration] == fmt.Sprintf("%d", obj.Generation) && job.Labels[LabelHelmJobType] == "uninstall"
-
-	if !isMyJob {
-		if !job_manager.HasJobFinished(ctx, r.Client, job) {
-			return check.Failed(fmt.Errorf("waiting for previous jobs to finish execution"))
-		}
-
-		// deleting that job
-		if err := r.Delete(ctx, job, &client.DeleteOptions{
-			GracePeriodSeconds: fn.New(int64(10)),
-			Preconditions:      &metav1.Preconditions{},
-			PropagationPolicy:  fn.New(metav1.DeletePropagationBackground),
-		}); err != nil {
-			return check.Failed(err)
-		}
-
-		return check.StillRunning(fmt.Errorf("deleting helm job")).RequeueAfter(1 * time.Second)
-	}
-
-	if !job_manager.HasJobFinished(ctx, r.Client, job) {
-		return check.Failed(fmt.Errorf("waiting for job to finish execution"))
-	}
-
-	// check.Message = job_manager.GetTerminationLog(ctx, r.Client, job.Namespace, job.Name)
-	if job.Status.Failed > 0 {
-		return check.Failed(fmt.Errorf("helm deletion job failed"))
-	}
-
-	// deleting that job
-	if err := r.Delete(ctx, job, &client.DeleteOptions{
-		GracePeriodSeconds: fn.New(int64(10)),
-		Preconditions:      &metav1.Preconditions{},
-		PropagationPolicy:  fn.New(metav1.DeletePropagationBackground),
-	}); err != nil {
+	if err := r.Delete(check.Context(), &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: obj.Export.ViaSecret, Namespace: obj.Namespace}}); err != nil {
 		return check.Failed(err)
 	}
 
-	return check.Completed()
+	return check.Passed()
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -513,10 +384,6 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if r.Scheme == nil {
 		r.Scheme = mgr.GetScheme()
-	}
-
-	if r.YAMLClient == nil {
-		return fmt.Errorf("yamlclient must be set")
 	}
 
 	if r.Env == nil {
@@ -538,6 +405,6 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).For(&v1.HelmChart{}).Named("plugin-helm-chart")
 	builder.Owns(&batchv1.Job{})
 	builder.WithOptions(controller.Options{MaxConcurrentReconciles: r.Env.MaxConcurrentReconciles})
-	builder.WithEventFilter(rApi.ReconcileFilter())
+	builder.WithEventFilter(reconciler.ReconcileFilter())
 	return builder.Complete(r)
 }
