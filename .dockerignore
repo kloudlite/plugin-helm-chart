@@ -1,8 +1,11 @@
 # More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
 # Ignore build and test binaries.
-# **
-# !bin/
-.secrets
-bin
-.direnv
-.tools
+**
+!flake*
+!go.*
+!api
+!cmd
+!internal
+!kloudlite
+!constants
+!Runfile.yml

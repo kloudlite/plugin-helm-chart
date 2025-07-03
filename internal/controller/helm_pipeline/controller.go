@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -30,10 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
-	fn "github.com/kloudlite/operator/toolkit/functions"
-	job_helper "github.com/kloudlite/operator/toolkit/job-helper"
-	"github.com/kloudlite/operator/toolkit/reconciler"
-	step_result "github.com/kloudlite/operator/toolkit/reconciler/step-result"
+	fn "github.com/kloudlite/kloudlite/operator/toolkit/functions"
+	job_helper "github.com/kloudlite/kloudlite/operator/toolkit/job-helper"
+	"github.com/kloudlite/kloudlite/operator/toolkit/reconciler"
 	"github.com/kloudlite/plugin-helm-chart/api/v1"
 	"github.com/kloudlite/plugin-helm-chart/internal/controller/helm_pipeline/templates"
 	batchv1 "k8s.io/api/batch/v1"
@@ -58,16 +56,6 @@ type HelmPipelineReconciler struct {
 func (r *HelmPipelineReconciler) GetName() string {
 	return "plugin-helm-pipeline"
 }
-
-const (
-	createJobRBAC string = "create-job-RBAC"
-
-	createInstallJob   string = "create-install-job"
-	createUninstallJob string = "create-uninstall-job"
-
-	processExports string = "process-exports"
-	cleanupExports string = "cleanup-exports"
-)
 
 const (
 	jobTrackerAnnKey = "kloudlite.io/helmpipeline.tracker"
@@ -95,86 +83,34 @@ func (r *HelmPipelineReconciler) Reconcile(ctx context.Context, request ctrl.Req
 	req.PreReconcile()
 	defer req.PostReconcile()
 
-	if req.Object.GetDeletionTimestamp() != nil {
-		if x := r.finalize(req); !x.ShouldProceed() {
-			return x.ReconcilerResponse()
-		}
-		return ctrl.Result{}, nil
-	}
-
-	if step := req.ClearStatusIfAnnotated(); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := req.EnsureLabelsAndAnnotations(); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := req.EnsureFinalizers(reconciler.CommonFinalizer); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := req.EnsureCheckList([]reconciler.CheckMeta{
-		{Name: createJobRBAC, Title: "Creates Helm Job RBAC"},
-		{Name: createInstallJob, Title: "Creates Helm Install Job"},
-		{Name: processExports, Title: "Process Exports"},
-	}); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := r.ensureJobRBAC(req); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := r.createInstallJob(req); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	if step := r.processExports(req); !step.ShouldProceed() {
-		return step.ReconcilerResponse()
-	}
-
-	req.Object.Status.IsReady = true
-	return ctrl.Result{}, nil
-}
-
-func (r *HelmPipelineReconciler) finalize(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
-	obj := req.Object
-	check := reconciler.NewRunningCheck("finalizing", req)
-
-	deleteCheckList := []reconciler.CheckMeta{
-		{Name: createUninstallJob, Title: "Helm Pipeline Uninstall Job"},
-		{Name: cleanupExports, Title: "Removes Helm Pipeline Export Secrets"},
-	}
-
-	if !slices.Equal(obj.Status.CheckList, deleteCheckList) {
-		obj.Status.Checks = nil
-		if step := req.EnsureCheckList(deleteCheckList); !step.ShouldProceed() {
-			return step
-		}
-		return check.StillRunning(errors.New("updating finalize checklist")).RequeueAfter(1 * time.Second)
-	}
-
-	if step := r.createUninstallJob(req); !step.ShouldProceed() {
-		return step
-	}
-
-	if step := r.cleanupExports(req); !step.ShouldProceed() {
-		return step
-	}
-
-	return req.Finalize()
+	return reconciler.ReconcileSteps(req, []reconciler.Step[*v1.HelmPipeline]{
+		{
+			Name:     "setup-k8s-job-RBAC",
+			Title:    "Setup K8s Job RBAC",
+			OnCreate: r.setupJobRBAC,
+			OnDelete: nil,
+		},
+		{
+			Name:     "setup-helm-pipeline-job",
+			Title:    "Setup Helm Pipeline Job",
+			OnCreate: r.createInstallJob,
+			OnDelete: r.createUninstallJob,
+		},
+		{
+			Name:     "setup-pipeline-exports",
+			Title:    "Setup Helm Pipeline Job",
+			OnCreate: r.processExports,
+			OnDelete: r.cleanupExports,
+		},
+	})
 }
 
 const JobServiceAccountName = "helm-pipeline-sa"
 
-func (r *HelmPipelineReconciler) ensureJobRBAC(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
-	ctx, obj := req.Context(), req.Object
-	check := reconciler.NewRunningCheck(createJobRBAC, req)
-
+func (r *HelmPipelineReconciler) setupJobRBAC(check *reconciler.Check[*v1.HelmPipeline], obj *v1.HelmPipeline) reconciler.StepResult {
 	jobSvcAcc := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: JobServiceAccountName, Namespace: obj.Namespace}}
 
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, jobSvcAcc, func() error {
+	if _, err := controllerutil.CreateOrUpdate(check.Context(), r.Client, jobSvcAcc, func() error {
 		if jobSvcAcc.Annotations == nil {
 			jobSvcAcc.Annotations = make(map[string]string, 1)
 		}
@@ -185,7 +121,7 @@ func (r *HelmPipelineReconciler) ensureJobRBAC(req *reconciler.Request[*v1.HelmP
 	}
 
 	crb := rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-rb", JobServiceAccountName)}}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, &crb, func() error {
+	if _, err := controllerutil.CreateOrUpdate(check.Context(), r.Client, &crb, func() error {
 		if crb.Annotations == nil {
 			crb.Annotations = make(map[string]string, 1)
 		}
@@ -216,7 +152,7 @@ func (r *HelmPipelineReconciler) ensureJobRBAC(req *reconciler.Request[*v1.HelmP
 		return check.Failed(err)
 	}
 
-	return check.Completed()
+	return check.Passed()
 }
 
 func valuesToYaml(values map[string]apiextensionsv1.JSON) (string, error) {
@@ -248,13 +184,11 @@ const (
 
 // runPipelineJob builds, creates (if needed) and tracks a Job from a template
 // - opType must be install|uninstall
-func (r *HelmPipelineReconciler) runPipelineJob(req *reconciler.Request[*v1.HelmPipeline], check *reconciler.CheckWrapper[*v1.HelmPipeline], jobSpec []byte, op jobOpType) step_result.Result {
-	ctx, obj := req.Context(), req.Object
-
+func (r *HelmPipelineReconciler) runPipelineJob(check *reconciler.Check[*v1.HelmPipeline], obj *v1.HelmPipeline, jobSpec []byte, op jobOpType) reconciler.StepResult {
 	annVal := fmt.Sprintf("%d/%s", obj.GetGeneration(), op)
 	name := fmt.Sprintf("%s-pipeline-job", obj.Name)
 
-	jt, err := job_helper.NewJobTracker(ctx, r.Client, job_helper.JobTrackerArgs{
+	jt, err := job_helper.NewJobTracker(check.Context(), r.Client, job_helper.JobTrackerArgs{
 		JobNamespace: obj.Namespace,
 		JobName:      name,
 		IsTargetJob: func(job *batchv1.Job) bool {
@@ -275,30 +209,31 @@ func (r *HelmPipelineReconciler) runPipelineJob(req *reconciler.Request[*v1.Helm
 				OwnerReferences: []metav1.OwnerReference{fn.AsOwner(obj, true)},
 			},
 		}
+
+		check.Logger().Warn("job.spec", "YAML", string(jobSpec))
+
 		if err := yaml.Unmarshal(jobSpec, &job.Spec); err != nil {
 			return check.Failed(err)
 		}
-		if err := r.Create(ctx, job); err != nil {
+		if err := r.Client.Create(check.Context(), job); err != nil {
 			return check.Failed(err)
 		}
-		return check.StillRunning(errors.New("waiting for job to be created"))
+
+		return check.Abort("waiting for job to be created")
 	}
 
-	phase, msg, err := jt.Process(ctx)
+	phase, msg, err := jt.StartTracking(check.Context())
 	obj.Status.Phase = phase
 	if err != nil {
 		return check.Failed(err)
 	}
 	if phase != job_helper.JobPhaseSucceeded {
-		return check.StillRunning(errors.New(msg))
+		return check.Abort(msg)
 	}
-	return check.Completed()
+	return check.Passed()
 }
 
-func (r *HelmPipelineReconciler) createInstallJob(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
-	obj := req.Object
-	check := reconciler.NewRunningCheck(createInstallJob, req)
-
+func (r *HelmPipelineReconciler) createInstallJob(check *reconciler.Check[*v1.HelmPipeline], obj *v1.HelmPipeline) reconciler.StepResult {
 	pipelineSteps := make([]templates.Pipeline, 0, len(obj.Spec.Pipeline))
 
 	for _, pipeline := range obj.Spec.Pipeline {
@@ -314,7 +249,7 @@ func (r *HelmPipelineReconciler) createInstallJob(req *reconciler.Request[*v1.He
 	}
 
 	b, err := templates.ParseBytes(r.templateInstallJobSpec, templates.HelmPipelineInstallJobSpecVars{
-		PodAnnotations:     fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."),
+		PodAnnotations:     fn.MapFilterWithPrefix(obj.GetAnnotations(), reconciler.ObservabilityAnnotationKey),
 		PodTolerations:     obj.Spec.HelmJobVars.Tolerations,
 		NodeSelector:       obj.Spec.HelmJobVars.NodeSelector,
 		ServiceAccountName: JobServiceAccountName,
@@ -326,16 +261,13 @@ func (r *HelmPipelineReconciler) createInstallJob(req *reconciler.Request[*v1.He
 		return check.Failed(err)
 	}
 
-	return r.runPipelineJob(req, check, b, InstallOp)
+	return r.runPipelineJob(check, obj, b, InstallOp)
 }
 
-func (r *HelmPipelineReconciler) createUninstallJob(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
-	obj := req.Object
-	check := reconciler.NewRunningCheck(createUninstallJob, req)
-
+func (r *HelmPipelineReconciler) createUninstallJob(check *reconciler.Check[*v1.HelmPipeline], obj *v1.HelmPipeline) reconciler.StepResult {
 	b, err := templates.ParseBytes(r.templateUninstallJobSpec, templates.HelmPipelineUninstallJobSpecVars{
 		Pipeline:           obj.Spec.Pipeline,
-		PodAnnotations:     fn.MapFilterWithPrefix(obj.GetAnnotations(), "kloudlite.io/observability."),
+		PodAnnotations:     fn.MapFilterWithPrefix(obj.GetAnnotations(), reconciler.ObservabilityAnnotationKey),
 		PodTolerations:     obj.Spec.HelmJobVars.Tolerations,
 		NodeSelector:       obj.Spec.HelmJobVars.NodeSelector,
 		ServiceAccountName: JobServiceAccountName,
@@ -346,13 +278,10 @@ func (r *HelmPipelineReconciler) createUninstallJob(req *reconciler.Request[*v1.
 		return check.Failed(err)
 	}
 
-	return r.runPipelineJob(req, check, b, UninstallOp)
+	return r.runPipelineJob(check, obj, b, UninstallOp)
 }
 
-func (r *HelmPipelineReconciler) processExports(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
-	ctx, obj := req.Context(), req.Object
-	check := reconciler.NewRunningCheck(processExports, req)
-
+func (r *HelmPipelineReconciler) processExports(check *reconciler.Check[*v1.HelmPipeline], obj *v1.HelmPipeline) reconciler.StepResult {
 	hasUpdate := false
 	for _, step := range obj.Spec.Pipeline {
 		if step.Export.ViaSecret == "" {
@@ -362,15 +291,15 @@ func (r *HelmPipelineReconciler) processExports(req *reconciler.Request[*v1.Helm
 	}
 
 	if hasUpdate {
-		if err := r.Update(ctx, obj); err != nil {
+		if err := r.Client.Update(check.Context(), obj); err != nil {
 			return check.Failed(err)
 		}
-		return check.StillRunning(errors.New("setting pipeline.export.viaSecret field to their default value"))
+
+		return check.Abort("setting pipeline.export.viaSecret field to their default value")
 	}
 
 	for _, step := range obj.Spec.Pipeline {
 		if step.Export.Template == "" || step.Export.ViaSecret == "" {
-			req.Logger.Info("export.template or export.viaSecret field is not set, skipping export processing")
 			continue
 		}
 
@@ -382,13 +311,13 @@ func (r *HelmPipelineReconciler) processExports(req *reconciler.Request[*v1.Helm
 			HelmReleaseNamespace: step.Release.Namespace,
 		}
 
-		m, err := step.Export.ParseKV(ctx, r.Client, step.Release.Namespace, valuesMap)
+		m, err := step.Export.ParseKV(check.Context(), r.Client, step.Release.Namespace, valuesMap)
 		if err != nil {
 			return check.Failed(errors.Join(errors.New("failed to parse export KVs"), err))
 		}
 
 		exportSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: step.Export.ViaSecret, Namespace: step.Release.Namespace}}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, exportSecret, func() error {
+		if _, err := controllerutil.CreateOrUpdate(check.Context(), r.Client, exportSecret, func() error {
 			exportSecret.StringData = m
 			return nil
 		}); err != nil {
@@ -396,24 +325,26 @@ func (r *HelmPipelineReconciler) processExports(req *reconciler.Request[*v1.Helm
 		}
 	}
 
-	return check.Completed()
+	return check.Passed()
 }
 
-func (r *HelmPipelineReconciler) cleanupExports(req *reconciler.Request[*v1.HelmPipeline]) step_result.Result {
-	ctx, obj := req.Context(), req.Object
-	check := reconciler.NewRunningCheck(cleanupExports, req)
-
+func (r *HelmPipelineReconciler) cleanupExports(check *reconciler.Check[*v1.HelmPipeline], obj *v1.HelmPipeline) reconciler.StepResult {
 	for _, step := range obj.Spec.Pipeline {
 		if step.Export.ViaSecret == "" {
 			continue
 		}
 
-		if err := fn.DeleteAndWait(ctx, req.Logger, r.Client, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: step.Export.ViaSecret, Namespace: step.Release.Namespace}}); err != nil {
+		if err := fn.DeleteAndWait(check.Context(), r.Client, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      step.Export.ViaSecret,
+				Namespace: step.Release.Namespace,
+			},
+		}); err != nil {
 			return check.Failed(err)
 		}
 	}
 
-	return check.Completed()
+	return check.Passed()
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -74,3 +74,10 @@ tasks:
           --output=type=image,compression=zstd,force-compression=true,compression-level=12,push=true
           --build-context project-root=../..
           .
+
+  test:
+    dir: ./internal/controller/helm_chart
+    env:
+      HELM_JOB_RUNNER_IMAGE: "ghcr.io/kloudlite/plugin-helm-chart/helm-job-runner:v1.0.0"
+    cmd:
+      - ginkgo 

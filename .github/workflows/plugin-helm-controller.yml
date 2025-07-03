@@ -30,6 +30,8 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     name: build-controller-${{matrix.arch}}
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,9 +63,6 @@ jobs:
     needs:
       - build-controller
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - uses: nxtcoder17/actions/setup-docker@main
         with:
           docker_registry: "ghcr.io"
@@ -71,13 +70,10 @@ jobs:
           docker_password: ${{ github.token }}
           qemu: false
 
-      - uses: nxtcoder17/actions/metadata@main
-        id: meta
-
       - shell: bash
         env:
           IMAGE: "ghcr.io/${{ github.repository }}/controller"
-          tag: "${{ steps.meta.outputs.version }}"
+          tag: "${{ needs.build-controller.outputs.version }}"
         run: |+
           docker buildx imagetools create -t $IMAGE:$tag $IMAGE:$tag-amd64 $IMAGE:$tag-arm64
 

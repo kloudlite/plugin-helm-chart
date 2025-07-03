@@ -35,8 +35,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/kloudlite/operator/toolkit/kubectl"
-
 	pluginhelmchartkloudlitegithubcomv1 "github.com/kloudlite/plugin-helm-chart/api/v1"
 	helm_chart "github.com/kloudlite/plugin-helm-chart/internal/controller/helm_chart"
 	helm_pipeline "github.com/kloudlite/plugin-helm-chart/internal/controller/helm_pipeline"
@@ -148,8 +146,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	yamlClient := kubectl.NewYAMLClientOrDie(mgr.GetConfig(), kubectl.YAMLClientOpts{})
-
 	ev, err := helm_chart.LoadEnv()
 	if err != nil {
 		panic(err)
@@ -161,10 +157,9 @@ func main() {
 	}
 
 	if err = (&helm_chart.HelmChartReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		YAMLClient: yamlClient,
-		Env:        ev,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Env:    ev,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HelmChart")
 		os.Exit(1)

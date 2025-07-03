@@ -17,9 +17,9 @@ limitations under the License.
 package v1
 
 import (
-	job_helper "github.com/kloudlite/operator/toolkit/job-helper"
-	"github.com/kloudlite/operator/toolkit/plugin"
-	"github.com/kloudlite/operator/toolkit/reconciler"
+	job_helper "github.com/kloudlite/kloudlite/operator/toolkit/job-helper"
+	"github.com/kloudlite/kloudlite/operator/toolkit/plugin"
+	"github.com/kloudlite/kloudlite/operator/toolkit/reconciler"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
