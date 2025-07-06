@@ -98,8 +98,10 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
-github.com/kloudlite/operator/toolkit v0.0.0-20250520103510-f03add4a612e h1:nTW75CxEyyaUGllZeO/2kULAX30ej0NrJ1ycBMrkaHk=
-github.com/kloudlite/operator/toolkit v0.0.0-20250520103510-f03add4a612e/go.mod h1:FZ4IhPJxFseIEFzfKlvH+4MQmwNtyHGMgpySOLURsCs=
+github.com/kloudlite/kloudlite/operator/toolkit v0.0.0-20250623010416-9d0948c16c98 h1:BJKdHC0MTpgLDDK1YXqh9KLJSndi9lbZ6qN9FjSGqDw=
+github.com/kloudlite/kloudlite/operator/toolkit v0.0.0-20250623010416-9d0948c16c98/go.mod h1:5Y8O92+RJVeudDn6EqmHL/Fj98sf/miFczz7JEb0zqU=
+github.com/kloudlite/kloudlite/operator/toolkit v0.0.0-20250706090838-4e79040cc76b h1:/OdLMzygrQQXG0/XvSqmZ8EahMF4Tq3kaoj07J4aqP0=
+github.com/kloudlite/kloudlite/operator/toolkit v0.0.0-20250706090838-4e79040cc76b/go.mod h1:652d3xmvRtT/58ck7yGRoUPtI7u3d4hfgYsVjqKQzO8=
 github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=

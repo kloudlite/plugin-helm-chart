@@ -4,66 +4,8 @@ import (
 	"embed"
 	"path/filepath"
 
-	operator_templates "github.com/kloudlite/operator/toolkit/templates"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	operator_templates "github.com/kloudlite/kloudlite/operator/toolkit/templates"
 )
-
-type InstallJobVars struct {
-	Metadata metav1.ObjectMeta
-
-	ObservabilityAnnotations map[string]string
-
-	ReleaseName      string
-	ReleaseNamespace string
-
-	Image           string
-	ImagePullPolicy string
-
-	BackOffLimit int
-
-	ServiceAccountName string
-
-	Tolerations  []corev1.Toleration
-	Affinity     corev1.Affinity
-	NodeSelector map[string]string
-
-	ChartRepoURL string
-	ChartName    string
-	ChartVersion string
-
-	PreInstall  string
-	PostInstall string
-
-	HelmValuesYAML string
-}
-
-type UnInstallJobVars struct {
-	Metadata metav1.ObjectMeta
-
-	ObservabilityAnnotations map[string]string
-
-	ReleaseName      string
-	ReleaseNamespace string
-
-	Image           string
-	ImagePullPolicy string
-
-	BackOffLimit int
-
-	ServiceAccountName string
-
-	Tolerations  []corev1.Toleration
-	Affinity     corev1.Affinity
-	NodeSelector map[string]string
-
-	ChartRepoURL string
-	ChartName    string
-	ChartVersion string
-
-	PreUninstall  string
-	PostUninstall string
-}
 
 //go:embed *
 var templatesDir embed.FS

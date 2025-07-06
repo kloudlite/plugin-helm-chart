@@ -1,4 +1,4 @@
-{{- with .}}
+{{- with . -}}
 template:
   metadata:
     annotations: {{.PodAnnotations | default dict | toJson }}
@@ -9,8 +9,12 @@ template:
 
     securityContext:
       runAsNonRoot: true
-      runAsUser: 65532 # nonroot user from gcr.io/distroless/static:nonroot image
-      runAsGroup: 65532 # nonroot group from gcr.io/distroless/static:nonroot image
+
+      # nonroot user from gcr.io/distroless/static:nonroot image
+      runAsUser: 65532
+
+      # nonroot group from gcr.io/distroless/static:nonroot image
+      runAsGroup: 65532
 
     containers:
       - name: helm

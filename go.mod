@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482
-	github.com/kloudlite/operator/toolkit v0.0.0-20250520103510-f03add4a612e
+	github.com/kloudlite/kloudlite/operator/toolkit v0.0.0-20250706090838-4e79040cc76b
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
 	k8s.io/api v0.31.3

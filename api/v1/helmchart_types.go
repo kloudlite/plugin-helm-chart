@@ -17,9 +17,10 @@ limitations under the License.
 package v1
 
 import (
-	"github.com/kloudlite/operator/toolkit/plugin"
-	rApi "github.com/kloudlite/operator/toolkit/reconciler"
-	types "github.com/kloudlite/operator/toolkit/types"
+	job_helper "github.com/kloudlite/kloudlite/operator/toolkit/job-helper"
+	"github.com/kloudlite/kloudlite/operator/toolkit/plugin"
+	rApi "github.com/kloudlite/kloudlite/operator/toolkit/reconciler"
+	types "github.com/kloudlite/kloudlite/operator/toolkit/types"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,9 +57,8 @@ type HelmChartSpec struct {
 
 // HelmChartStatus defines the observed state of HelmChart.
 type HelmChartStatus struct {
-	rApi.Status   `json:",inline"`
-	ReleaseNotes  string `json:"releaseNotes"`
-	ReleaseStatus string `json:"releaseStatus"`
+	rApi.Status `json:",inline"`
+	Phase       job_helper.JobPhase `json:"phase"`
 }
 
 // +kubebuilder:object:root=true
