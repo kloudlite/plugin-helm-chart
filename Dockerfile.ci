@@ -1,6 +1,4 @@
-FROM alpine:latest AS builder
-RUN apk add nix
-
+FROM ghcr.io/nxtcoder17/nix AS builder
 WORKDIR /app
 
 RUN --mount=type=bind,source=flake.nix,target=flake.nix \
